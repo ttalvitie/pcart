@@ -1,0 +1,190 @@
+#pragma once
+
+#include <pcart/variable.h>
+#include <pcart/bits.h>
+
+namespace pcart {
+
+class Cell {
+private:
+	uint64_t repr;
+
+	friend class CellCtx;
+};
+
+class DataSplitter {
+public:
+	template <typename T>
+	size_t split(pair<Cell, T>* data, size_t dataCount) {
+		size_t a = 0;
+		size_t b = dataCount;
+		while(a != b) {
+			if(data[a].first & mask) {
+				--b;
+				swap(data[a], data[b]);
+			} else {
+				++a;
+			}
+		}
+		return a;
+	}
+
+private:
+	uint64_t mask;
+
+	friend class CellCtx;
+};
+
+class CellCtx {
+public:
+	CellCtx(const vector<VarPtr>& vars) {
+		size_t bitPos = 0;
+		for(const VarPtr& var : vars) {
+			size_t bitCount = lambdaVisit(var,
+				[&](const RealVarPtr& var) {
+					return var->maxSubdiv + 1;
+				},
+				[&](const CatVarPtr& var) {
+					return var->cats.size();
+				}
+			);
+			varInfo_.push_back({var, bitPos, bitCount, 0});
+			bitPos += bitCount;
+		}
+		
+		if(bitPos > 64) {
+			fail("Storing a cell requires ", bitPos, " bits, but CellCtx supports at most 64");
+		}
+		
+		realMask_ = 0;
+		catMask_ = 0;
+		root_.repr = 0;
+		for(VarInfo& info : varInfo_) {
+			info.mask = ones64(info.bitCount) << info.startBit;
+			lambdaVisit(info.var,
+				[&](const RealVarPtr& var) {
+					realMask_ |= info.mask;
+					info.putRepr(root_, (uint64_t)-1 << 1);
+				},
+				[&](const CatVarPtr& var) {
+					catMask_ |= info.mask;
+					info.putRepr(root_, (uint64_t)-1);
+				}
+			);
+		}
+	}
+
+	Cell root() const {
+		return root_;
+	}
+
+	template <typename F>
+	void iterateSplits(Cell cell, F f) {
+		for(const VarInfo& info : varInfo_) {
+			uint64_t repr = info.getRepr(cell);
+			lambdaVisit(info.var,
+				[&](const RealVarPtr& var) {
+					uint64_t topBit = bit64(var->maxSubdiv);
+					if(repr & topBit) {
+						uint64_t leftRepr = (repr ^ topBit) << 1;
+						uint64_t rightRepr = leftRepr | (uint64_t)1;
+
+						Cell left = cell;
+						info.putRepr(left, leftRepr);
+						Cell right = cell;
+						info.putRepr(right, rightRepr);
+
+						size_t shift = clz64(~repr << (64 - var->maxSubdiv));
+						DataSplitter dataSplitter = {bit64(info.startBit + shift)};
+
+						f(info.var, left, right, dataSplitter);
+					}
+				},
+				[&](const CatVarPtr& var) {
+					uint64_t bottom = repr & -repr;
+					uint64_t mask = repr ^ bottom;
+					for(uint64_t sub = mask; sub; sub = (sub - 1) & mask) {
+						Cell left = cell;
+						var->putRepr(left, repr ^ sub);
+						Cell right = cell;
+						var->putRepr(right, sub);
+
+						DataSplitter dataSplitter = {right.repr};
+
+						handleSplit(info.var, left, right, dataSplitter);
+					}
+				}
+			);
+		}
+	}
+
+	Cell pointCell(const vector<double>& src) const {
+		Cell cell;
+		cell.repr = 0;
+		for(const VarInfo& info : varInfo_) {
+			lambdaVisit(info.var,
+				[&](const RealVarPtr& var) {
+					double val = var->parseDataSrcVal(src);
+					double t = (val - var->minVal) / (var->maxVal - var->minVal);
+					t *= (double)bit64(var->maxSubdiv);
+					t = floor(t);
+					t = max(t, 0.0);
+					size_t repr = (size_t)t;
+					repr = min(repr, ones64(var->maxSubdiv));
+					info.putRepr(cell, repr);
+				},
+				[&](const CatVarPtr& var) {
+					size_t val = var->parseDataSrcVal(src);
+					info.putRepr(cell, bit64(val));
+				}
+			);
+		}
+		return cell;
+	}
+
+	template <typename T, typename F>
+	void iterateDataSplits(
+		Cell cell,
+		pair<Cell, T>* data,
+		size_t dataCount,
+		bool allowEmpty,
+		F f
+	) const {
+		if(!allowEmpty && dataCount <= 1) {
+			return;
+		}
+
+		iterateSplits(cell, [&](
+			const VarPtr& var,
+			Cell left, Cell right,
+			DataSplitter dataSplitter
+		) {
+			size_t splitPos = dataSplitter.split(data, dataCount);
+			if(allowEmpty || (splitPos != 0 && splitPos != dataCount)) {
+				f(var, left, right, splitPos);
+			}
+		});
+	}
+
+private:
+	struct VarInfo {
+		VarPtr var;
+		size_t startBit;
+		size_t bitCount;
+		uint64_t mask;
+
+		uint64_t getRepr(Cell cell) const {
+			return (cell.repr & mask) >> startBit;
+		}
+		void putRepr(Cell& cell, uint64_t repr) const {
+			cell.repr ^= (cell.repr ^ (repr << startBit)) & mask;
+		}
+	};
+
+	vector<VarInfo> varInfo_;
+	uint64_t realMask_;
+	uint64_t catMask_;
+	Cell root_;
+};
+
+}

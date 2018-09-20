@@ -155,12 +155,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="bits.h" />
     <ClInclude Include="common.h" />
+    <ClInclude Include="cell.h" />
     <ClInclude Include="tree.h" />
     <ClInclude Include="score.h" />
     <ClInclude Include="variable.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="variable.cpp" />
     <ClCompile Include="tree.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

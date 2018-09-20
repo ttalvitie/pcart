@@ -1,18 +1,36 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
 namespace pcart {
 
+using std::ceil;
+using std::floor;
+using std::function;
+using std::make_shared;
+using std::max;
+using std::min;
+using std::move;
+using std::pair;
+using std::round;
+using std::shared_ptr;
 using std::size_t;
+using std::string;
 using std::uint64_t;
+using std::unique_ptr;
+using std::variant;
+using std::vector;
 
 inline void stderrPrint() {
 	std::cerr << "\n";

@@ -27,9 +27,18 @@
     <ClInclude Include="tree.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cell.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bits.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="variable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
