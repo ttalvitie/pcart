@@ -17,6 +17,8 @@
 namespace pcart {
 
 using std::ceil;
+using std::cerr;
+using std::cout;
 using std::floor;
 using std::function;
 using std::get;
@@ -27,6 +29,7 @@ using std::make_unique;
 using std::max;
 using std::min;
 using std::move;
+using std::ostream;
 using std::pair;
 using std::round;
 using std::shared_ptr;

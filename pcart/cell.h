@@ -86,19 +86,19 @@ public:
 		for(const VarInfo& info : varInfo_) {
 			lambdaVisit(info.var,
 				[&](const RealVarPtr& var) {
-				double val = var->parseDataSrcVal(src);
-				double t = (val - var->minVal) / (var->maxVal - var->minVal);
-				t *= (double)bit64(var->maxSubdiv);
-				t = floor(t);
-				t = max(t, 0.0);
-				size_t repr = (size_t)t;
-				repr = min(repr, ones64(var->maxSubdiv));
-				info.putRepr(cell, repr);
-			},
+					double val = var->parseDataSrcVal(src);
+					double t = (val - var->minVal) / (var->maxVal - var->minVal);
+					t *= (double)bit64(var->maxSubdiv);
+					t = floor(t);
+					t = max(t, 0.0);
+					size_t repr = (size_t)t;
+					repr = min(repr, ones64(var->maxSubdiv));
+					info.putRepr(cell, repr);
+				},
 				[&](const CatVarPtr& var) {
-				size_t val = var->parseDataSrcVal(src);
-				info.putRepr(cell, bit64(val));
-			}
+					size_t val = var->parseDataSrcVal(src);
+					info.putRepr(cell, bit64(val));
+				}
 			);
 		}
 		return cell;
@@ -125,9 +125,14 @@ public:
 						dataSplitter.mask = bit64(info.startBit + shift);
 
 						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
+							size_t len = var->maxSubdiv - shift;
+							double t = (double)(rightRepr & ones64(len)) / (double)bit64(len);
+							t = max(min(t, 1.0), 0.0);
+							double splitVal = (1.0 - t) * var->minVal + t * var->maxVal;
+							
 							return make_unique<Tree>(RealSplit{
 								move(leftChild), move(rightChild),
-								var, 0.0 // TODO
+								var, splitVal
 							});
 						};
 

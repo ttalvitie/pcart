@@ -24,7 +24,7 @@ inline int clz64(uint64_t x) {
 #if defined(_MSC_VER)
 	unsigned long idx;
 	_BitScanReverse64(&idx, x);
-	return 64 - idx;
+	return 63 - idx;
 #else
 	static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "The case unsigned long long != uint64_t is not implemented");
 	return __builtin_clzll(x);

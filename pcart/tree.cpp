@@ -98,6 +98,58 @@ void iterateTrees(
 	);
 }
 
+void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string pre) {
+	out << pre1;
+	lambdaVisit(*tree,
+		[&](const RealLeaf& leaf) {
+			out << "-- " << leaf.var->name << ":";
+			out << " " << leaf.stats.avg;
+			out << " +- " << leaf.stats.stddev;
+			out << " x" << leaf.stats.dataCount;
+			out << "\n";
+		},
+		[&](const CatLeaf& leaf) {
+			out << "-- " << leaf.var->name << ": ";
+			for(size_t i = 0; i < leaf.var->cats.size(); ++i) {
+				if(i) {
+					out << ", ";
+				}
+				out << leaf.var->cats[i].name << " x" << leaf.stats.catCount[i];
+			}
+			out << "\n";
+		},
+		[&](const RealSplit& split) {
+			out << "-+ " << split.var->name << " (< or >=) " << split.splitVal << "\n";
+		},
+		[&](const CatSplit& split) {
+			auto writeMask = [&](uint64_t mask) {
+				bool first = true;
+				for(size_t i = 0; i < split.var->cats.size(); ++i) {
+					if(mask &bit64(i)) {
+						if(!first) {
+							out << ", ";
+						}
+						first = false;
+						out << split.var->cats[i].name;
+					}
+				}
+			};
+			out << "-+ " << split.var->name << " in {";
+			writeMask(split.leftCatMask);
+			out << "} or {";
+			writeMask(split.rightCatMask);
+			out << "}\n";
+		}
+	);
+	lambdaVisit(*tree,
+		[&](const BaseLeaf& leaf) {},
+		[&](const BaseSplit& split) {
+			printTreeRecursion(split.leftChild, out, pre + " |", pre + " |");
+			printTreeRecursion(split.rightChild, out, pre + " `", pre + "  ");
+		}
+	);
+}
+
 }
 
 void iterateTrees(
@@ -109,6 +161,10 @@ void iterateTrees(
 	lambdaVisit(response, [&](const auto& response) {
 		iterateTrees(predictors, response, dataSrc, f);
 	});
+}
+
+void printTree(const TreePtr& tree, ostream& out) {
+	printTreeRecursion(tree, cout, "", "");
 }
 
 }

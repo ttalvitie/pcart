@@ -58,4 +58,6 @@ void iterateTrees(
 	function<void(const TreeResult&)> f
 );
 
+void printTree(const TreePtr& tree, ostream& out = cout);
+
 }
