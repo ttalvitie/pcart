@@ -18,15 +18,17 @@ typedef Split<CatVar> CatSplit;
 typedef std::variant<RealLeaf, CatLeaf, RealSplit, CatSplit> Tree;
 typedef std::unique_ptr<Tree> TreePtr;
 
+struct BaseLeaf {};
+
+template <typename T>
+struct Leaf : public BaseLeaf {
+	shared_ptr<const T> var;
+	LeafStats<T> stats;
+};
+
 struct BaseSplit {
 	unique_ptr<Tree> leftChild;
 	unique_ptr<Tree> rightChild;
-};
-
-template <typename T>
-struct Leaf {
-	shared_ptr<const T> var;
-	LeafStats<T> stats;
 };
 
 template <>
@@ -53,7 +55,7 @@ void iterateTrees(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,
 	const vector<vector<double>>& data,
-	function<void(TreeResult)> f
+	function<void(const TreeResult&)> f
 );
 
 }

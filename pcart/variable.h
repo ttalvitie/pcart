@@ -56,7 +56,6 @@ struct CatVar : public BaseVar {
 	}
 };
 
-
 typedef shared_ptr<const RealVar> RealVarPtr;
 typedef shared_ptr<const CatVar> CatVarPtr;
 typedef variant<RealVarPtr, CatVarPtr> VarPtr;

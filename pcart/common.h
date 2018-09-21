@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -18,7 +19,10 @@ namespace pcart {
 using std::ceil;
 using std::floor;
 using std::function;
+using std::get;
+using std::make_pair;
 using std::make_shared;
+using std::make_tuple;
 using std::make_unique;
 using std::max;
 using std::min;
@@ -27,7 +31,10 @@ using std::pair;
 using std::round;
 using std::shared_ptr;
 using std::size_t;
+using std::sqrt;
 using std::string;
+using std::tie;
+using std::tuple;
 using std::uint64_t;
 using std::unique_ptr;
 using std::variant;

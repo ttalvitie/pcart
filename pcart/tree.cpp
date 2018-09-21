@@ -23,55 +23,79 @@ vector<pair<Cell, typename R::Val>> extractData(
 template <typename R>
 void iterateTreesRecursion(
 	const CellCtx& cellCtx,
+	const shared_ptr<const R>& response,
 	Cell cell,
 	pair<Cell, typename R::Val>* data,
 	size_t dataCount,
-	function<void(TreeResult)> f
+	function<TreeResult(TreeResult)> f
 ) {
 	cellCtx.iterateDataSplits(
 		cell, data, dataCount, true,
-		[&](const VarPtr& var, Cell left, Cell right, size_t splitPos) {
+		[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+			TreeResult res;
+			res.tree = lazySplit(nullptr, nullptr);
+			BaseSplit& split = *lambdaVisit(*res.tree,
+				[&](BaseSplit& split) {
+					return &split;
+				},
+				[&](BaseLeaf&) {
+					fail("Internal error");
+					return (BaseSplit*)nullptr;
+				}
+			);
+
 			iterateTreesRecursion<R>(
-				cellCtx, left, data, splitPos,
+				cellCtx, response, left, data, splitPos,
 				[&](TreeResult leftRes) {
 					iterateTreesRecursion<R>(
-						cellCtx, right, data + splitPos, dataCount - splitPos,
+						cellCtx, response, right, data + splitPos, dataCount - splitPos,
 						[&](TreeResult rightRes) {
-							TreeResult res;
 							res.dataScore = leftRes.dataScore + rightRes.dataScore;
 							res.structureScore = leftRes.structureScore + rightRes.structureScore;
 							res.totalScore = res.dataScore + res.structureScore;
-							res.tree = make_unique<Tree>(RealSplit{ // TODO
-								move(leftRes.tree), move(rightRes.tree),
-								nullptr, 0.0 // TODO
-							});
-							f(move(res));
+							split.leftChild = move(leftRes.tree);
+							split.rightChild = move(rightRes.tree);
+			
+							res = f(move(res));
+			
+							leftRes.tree = move(split.leftChild);
+							rightRes.tree = move(split.rightChild);
+			
+							return rightRes;
 						}
 					);
+					return leftRes;
 				}
 			);
 		}
 	);
 
 	TreeResult leafRes;
-	leafRes.dataScore = 0.0; // TODO
+	LeafStats<R> stats(*response, data, dataCount);
+	leafRes.dataScore = stats.score(*response);
 	leafRes.structureScore = 0.0; // TODO
-	leafRes.totalScore = 0.0; // TODO
-	leafRes.tree = make_unique<Tree>(RealLeaf{nullptr, LeafStats<RealVar>()}); // TODO
+	leafRes.totalScore = leafRes.dataScore + leafRes.structureScore;
+	leafRes.tree = make_unique<Tree>(Leaf<R>{ {}, response, move(stats)});
 	f(move(leafRes));
 }
 
 template <typename R>
 void iterateTrees(
 	const vector<VarPtr>& predictors,
-	const shared_ptr<R>& response,
+	const shared_ptr<const R>& response,
 	const vector<vector<double>>& dataSrc,
-	function<void(TreeResult)> f
+	function<void(const TreeResult&)> f
 ) {
 	CellCtx cellCtx(predictors);
 	typedef typename R::Val Val;
 	vector<pair<Cell, Val>> data = extractData(cellCtx, response, dataSrc);
-	iterateTreesRecursion<R>(cellCtx, cellCtx.root(), data.data(), data.size(), f);
+	iterateTreesRecursion<R>(
+		cellCtx, response, cellCtx.root(), data.data(), data.size(),
+		[&](TreeResult res) {
+			f((const TreeResult&)res);
+			return res;
+		}
+	);
 }
 
 }
@@ -80,7 +104,7 @@ void iterateTrees(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,
 	const vector<vector<double>>& dataSrc,
-	function<void(TreeResult)> f
+	function<void(const TreeResult&)> f
 ) {
 	lambdaVisit(response, [&](const auto& response) {
 		iterateTrees(predictors, response, dataSrc, f);
@@ -88,3 +112,4 @@ void iterateTrees(
 }
 
 }
+

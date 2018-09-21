@@ -2,6 +2,7 @@
 
 #include <pcart/variable.h>
 #include <pcart/bits.h>
+#include <pcart/tree.h>
 
 namespace pcart {
 
@@ -123,22 +124,39 @@ public:
 						DataSplitter dataSplitter;
 						dataSplitter.mask = bit64(info.startBit + shift);
 
-						f(info.var, left, right, dataSplitter);
+						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
+							return make_unique<Tree>(RealSplit{
+								move(leftChild), move(rightChild),
+								var, 0.0 // TODO
+							});
+						};
+
+						f(info.var, left, right, dataSplitter, lazySplit);
 					}
 				},
 				[&](const CatVarPtr& var) {
 					uint64_t bottom = bottomOne64(repr);
 					uint64_t mask = repr ^ bottom;
 					for(uint64_t sub = mask; sub; sub = (sub - 1) & mask) {
+						uint64_t leftCatMask = repr ^ sub;
+						uint64_t rightCatMask = sub;
+
 						Cell left = cell;
-						info.putRepr(left, repr ^ sub);
+						info.putRepr(left, leftCatMask);
 						Cell right = cell;
-						info.putRepr(right, sub);
+						info.putRepr(right, rightCatMask);
 
 						DataSplitter dataSplitter;
 						dataSplitter.mask = right.repr;
 
-						f(info.var, left, right, dataSplitter);
+						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
+							return make_unique<Tree>(CatSplit{
+								move(leftChild), move(rightChild),
+								var, leftCatMask, rightCatMask
+							});
+						};
+
+						f(info.var, left, right, dataSplitter, lazySplit);
 					}
 				}
 			);
@@ -160,11 +178,12 @@ public:
 		iterateSplits(cell, [&](
 			const VarPtr& var,
 			Cell left, Cell right,
-			DataSplitter dataSplitter
+			DataSplitter dataSplitter,
+			auto& lazySplit
 		) {
 			size_t splitPos = dataSplitter.split(data, dataCount);
 			if(allowEmpty || (splitPos != 0 && splitPos != dataCount)) {
-				f(var, left, right, splitPos);
+				f(var, left, right, splitPos, lazySplit);
 			}
 		});
 	}
