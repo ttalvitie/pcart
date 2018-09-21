@@ -2,9 +2,10 @@
 
 #include <pcart/common.h>
 
-#if defined(_MSC_VER) // Needed for MSVC topOne64
+#if defined(_MSC_VER) // Only for MSVC
 #   include <intrin.h>
-#   pragma intrinsic(_BitScanReverse64)
+#   pragma intrinsic(_BitScanReverse64) // topOne64
+#	pragma warning (disable : 4146) // bottomOne64
 #endif
 
 namespace pcart {
@@ -28,6 +29,10 @@ inline int clz64(uint64_t x) {
 	static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "The case unsigned long long != uint64_t is not implemented");
 	return __builtin_clzll(x);
 #endif
+}
+
+inline constexpr uint64_t bottomOne64(uint64_t x) {
+	return x & -x;
 }
 
 }

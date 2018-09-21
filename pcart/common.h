@@ -19,6 +19,7 @@ using std::ceil;
 using std::floor;
 using std::function;
 using std::make_shared;
+using std::make_unique;
 using std::max;
 using std::min;
 using std::move;

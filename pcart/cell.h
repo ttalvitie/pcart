@@ -10,16 +10,17 @@ private:
 	uint64_t repr;
 
 	friend class CellCtx;
+	friend class DataSplitter;
 };
 
 class DataSplitter {
 public:
 	template <typename T>
-	size_t split(pair<Cell, T>* data, size_t dataCount) {
+	size_t split(pair<Cell, T>* data, size_t dataCount) const {
 		size_t a = 0;
 		size_t b = dataCount;
 		while(a != b) {
-			if(data[a].first & mask) {
+			if(data[a].first.repr & mask) {
 				--b;
 				swap(data[a], data[b]);
 			} else {
@@ -78,8 +79,32 @@ public:
 		return root_;
 	}
 
+	Cell pointCell(const vector<double>& src) const {
+		Cell cell;
+		cell.repr = 0;
+		for(const VarInfo& info : varInfo_) {
+			lambdaVisit(info.var,
+				[&](const RealVarPtr& var) {
+				double val = var->parseDataSrcVal(src);
+				double t = (val - var->minVal) / (var->maxVal - var->minVal);
+				t *= (double)bit64(var->maxSubdiv);
+				t = floor(t);
+				t = max(t, 0.0);
+				size_t repr = (size_t)t;
+				repr = min(repr, ones64(var->maxSubdiv));
+				info.putRepr(cell, repr);
+			},
+				[&](const CatVarPtr& var) {
+				size_t val = var->parseDataSrcVal(src);
+				info.putRepr(cell, bit64(val));
+			}
+			);
+		}
+		return cell;
+	}
+
 	template <typename F>
-	void iterateSplits(Cell cell, F f) {
+	void iterateSplits(Cell cell, F f) const {
 		for(const VarInfo& info : varInfo_) {
 			uint64_t repr = info.getRepr(cell);
 			lambdaVisit(info.var,
@@ -95,51 +120,29 @@ public:
 						info.putRepr(right, rightRepr);
 
 						size_t shift = clz64(~repr << (64 - var->maxSubdiv));
-						DataSplitter dataSplitter = {bit64(info.startBit + shift)};
+						DataSplitter dataSplitter;
+						dataSplitter.mask = bit64(info.startBit + shift);
 
 						f(info.var, left, right, dataSplitter);
 					}
 				},
 				[&](const CatVarPtr& var) {
-					uint64_t bottom = repr & -repr;
+					uint64_t bottom = bottomOne64(repr);
 					uint64_t mask = repr ^ bottom;
 					for(uint64_t sub = mask; sub; sub = (sub - 1) & mask) {
 						Cell left = cell;
-						var->putRepr(left, repr ^ sub);
+						info.putRepr(left, repr ^ sub);
 						Cell right = cell;
-						var->putRepr(right, sub);
+						info.putRepr(right, sub);
 
-						DataSplitter dataSplitter = {right.repr};
+						DataSplitter dataSplitter;
+						dataSplitter.mask = right.repr;
 
-						handleSplit(info.var, left, right, dataSplitter);
+						f(info.var, left, right, dataSplitter);
 					}
 				}
 			);
 		}
-	}
-
-	Cell pointCell(const vector<double>& src) const {
-		Cell cell;
-		cell.repr = 0;
-		for(const VarInfo& info : varInfo_) {
-			lambdaVisit(info.var,
-				[&](const RealVarPtr& var) {
-					double val = var->parseDataSrcVal(src);
-					double t = (val - var->minVal) / (var->maxVal - var->minVal);
-					t *= (double)bit64(var->maxSubdiv);
-					t = floor(t);
-					t = max(t, 0.0);
-					size_t repr = (size_t)t;
-					repr = min(repr, ones64(var->maxSubdiv));
-					info.putRepr(cell, repr);
-				},
-				[&](const CatVarPtr& var) {
-					size_t val = var->parseDataSrcVal(src);
-					info.putRepr(cell, bit64(val));
-				}
-			);
-		}
-		return cell;
 	}
 
 	template <typename T, typename F>
