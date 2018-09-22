@@ -16,6 +16,7 @@
 
 namespace pcart {
 
+using std::abs;
 using std::ceil;
 using std::cerr;
 using std::cout;
