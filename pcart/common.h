@@ -44,6 +44,8 @@ using std::unique_ptr;
 using std::variant;
 using std::vector;
 
+const double pi = 4.0 * atan(1.0);
+
 inline void stderrPrint() {
 	std::cerr << "\n";
 }

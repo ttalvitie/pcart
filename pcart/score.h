@@ -31,7 +31,29 @@ struct LeafStats<RealVar> {
 	}
 
 	double score(const RealVar& var) {
-		return 0.0;
+		if(dataCount == 0) {
+			return 0.0;
+		}
+
+		double n = (double)dataCount;
+
+		double mu = avg;
+		double vari = stddev * stddev;
+
+		double s = (n - 1.0) * vari;
+		double mud = mu - var.barmu;
+		double t = (n * var.a / (n + var.a)) * mud * mud;
+
+		double score = 0.0;
+		score -= 0.5 * n * log(pi);
+		score += 0.5 * var.nu * log(var.lambda * var.nu);
+		score += 0.5 * log(var.a);
+		score -= 0.5 * log(n + var.a);
+		score += lgamma(0.5 * (n + var.nu));
+		score -= lgamma(0.5 * var.nu);
+		score -= 0.5 * (n + var.nu) * log(s + t + var.nu * var.lambda);
+
+		return score;
 	}
 };
 template <>
@@ -50,7 +72,28 @@ struct LeafStats<CatVar> {
 	}
 
 	double score(const CatVar& var) {
-		return 0.0;
+		if(dataCount == 0) {
+			return 0.0;
+		}
+
+		double score = 0.0;
+		
+		double alpha_sum = 0.0;
+		for(const CatInfo& info : var.cats) {
+			score -= lgamma(info.alpha);
+			alpha_sum += info.alpha;
+		}
+		score += lgamma(alpha_sum);
+
+		double count_sum = 0.0;
+		for(size_t i = 0; i < var.cats.size(); ++i) {
+			double count = (double)catCount[i] + var.cats[i].alpha;
+			score += lgamma(count);
+			count_sum += count;
+		}
+		score -= lgamma(count_sum);
+
+		return score;
 	}
 };
 
