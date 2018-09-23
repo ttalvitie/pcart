@@ -163,6 +163,7 @@
     <ClInclude Include="variable.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="score.cpp" />
     <ClCompile Include="variable.cpp" />
     <ClCompile Include="tree.cpp" />
   </ItemGroup>

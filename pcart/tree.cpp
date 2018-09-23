@@ -1,6 +1,7 @@
 #include <pcart/tree.h>
 
 #include <pcart/cell.h>
+#include <pcart/score.h>
 
 namespace pcart {
 
@@ -27,6 +28,7 @@ void iterateTreesRecursion(
 	Cell cell,
 	pair<Cell, typename R::Val>* data,
 	size_t dataCount,
+	double leafPenaltyTerm,
 	function<TreeResult(TreeResult)> f
 ) {
 	cellCtx.iterateDataSplits(
@@ -45,10 +47,10 @@ void iterateTreesRecursion(
 			);
 
 			iterateTreesRecursion<R>(
-				cellCtx, response, left, data, splitPos,
+				cellCtx, response, left, data, splitPos, leafPenaltyTerm,
 				[&](TreeResult leftRes) {
 					iterateTreesRecursion<R>(
-						cellCtx, response, right, data + splitPos, dataCount - splitPos,
+						cellCtx, response, right, data + splitPos, dataCount - splitPos, leafPenaltyTerm,
 						[&](TreeResult rightRes) {
 							res.dataScore = leftRes.dataScore + rightRes.dataScore;
 							res.structureScore = leftRes.structureScore + rightRes.structureScore;
@@ -73,7 +75,7 @@ void iterateTreesRecursion(
 	TreeResult leafRes;
 	LeafStats<R> stats(*response, data, dataCount);
 	leafRes.dataScore = stats.score(*response);
-	leafRes.structureScore = 0.0; // TODO
+	leafRes.structureScore = leafPenaltyTerm;
 	leafRes.totalScore = leafRes.dataScore + leafRes.structureScore;
 	leafRes.tree = make_unique<Tree>(Leaf<R>{ {}, response, move(stats)});
 	f(move(leafRes));
@@ -86,14 +88,22 @@ void iterateTrees(
 	const vector<vector<double>>& dataSrc,
 	function<void(const TreeResult&)> f
 ) {
+	StructureScoreTerms sst = computeStructureScoreTerms(predictors);
+
 	CellCtx cellCtx(predictors);
 	typedef typename R::Val Val;
 	vector<pair<Cell, Val>> data = extractData(cellCtx, response, dataSrc);
 	iterateTreesRecursion<R>(
-		cellCtx, response, cellCtx.root(), data.data(), data.size(),
-		[&](TreeResult res) {
+		cellCtx, response, cellCtx.root(), data.data(), data.size(), sst.leafPenaltyTerm,
+		[&](TreeResult src) {
+			TreeResult res;
+			res.dataScore = src.dataScore;
+			res.structureScore = sst.normalizerTerm + src.structureScore;
+			res.totalScore = res.dataScore + res.structureScore;
+			res.tree = move(src.tree);
 			f((const TreeResult&)res);
-			return res;
+			src.tree = move(res.tree);
+			return src;
 		}
 	);
 }

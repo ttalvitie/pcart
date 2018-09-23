@@ -87,14 +87,19 @@ struct LeafStats<CatVar> {
 
 		double count_sum = 0.0;
 		for(size_t i = 0; i < var.cats.size(); ++i) {
-			double count = (double)catCount[i] + var.cats[i].alpha;
-			score += lgamma(count);
-			count_sum += count;
+			score += lgamma((double)catCount[i] + var.cats[i].alpha);
 		}
-		score -= lgamma(count_sum);
+		score -= lgamma((double)dataCount + alpha_sum);
 
 		return score;
 	}
 };
+
+struct StructureScoreTerms {
+	double leafPenaltyTerm;
+	double normalizerTerm;
+};
+
+StructureScoreTerms computeStructureScoreTerms(const vector<VarPtr>& predictors);
 
 }
