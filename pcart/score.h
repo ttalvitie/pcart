@@ -30,7 +30,7 @@ struct LeafStats<RealVar> {
 		stddev = sqrt(stddev / (double)dataCount);
 	}
 
-	double score(const RealVar& var) {
+	double dataScore(const RealVar& var) const {
 		if(dataCount == 0) {
 			return 0.0;
 		}
@@ -71,7 +71,7 @@ struct LeafStats<CatVar> {
 		}
 	}
 
-	double score(const CatVar& var) {
+	double dataScore(const CatVar& var) const {
 		if(dataCount == 0) {
 			return 0.0;
 		}

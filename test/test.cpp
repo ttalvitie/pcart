@@ -9,10 +9,11 @@ using namespace std;
 
 typedef variant<uint64_t, pair<double, double>> VarRange;
 
-void checkTreeRecursion(
+pair<double, double> checkTreeRecursion(
 	const TreePtr& tree,
 	const vector<VarPtr>& pred,
 	const VarPtr& resp,
+	double leafPenaltyTerm,
 	const vector<const vector<double>*> data,
 	vector<VarRange>& ranges
 ) {
@@ -25,7 +26,7 @@ void checkTreeRecursion(
 		fail();
 		return (size_t)-1;
 	};
-	lambdaVisit(*tree,
+	return lambdaVisit(*tree,
 		[&](const RealSplit& split) {
 			size_t i = getPredIdx(split.var);
 			pair<double, double>& range = get<pair<double, double>>(ranges[i]);
@@ -43,13 +44,15 @@ void checkTreeRecursion(
 			pair<double, double> origRange = range;
 
 			range.second = split.splitVal;
-			checkTreeRecursion(split.leftChild, pred, resp, leftData, ranges);
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges);
 
 			range = origRange;
 			range.first = split.splitVal;
-			checkTreeRecursion(split.rightChild, pred, resp, rightData, ranges);
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges);
 
 			range = origRange;
+
+			return make_pair(leftp.first + rightp.first, leftp.second + rightp.second);
 		},
 		[&](const CatSplit& split) {
 			size_t i = getPredIdx(split.var);
@@ -70,24 +73,65 @@ void checkTreeRecursion(
 					fail();
 				}
 			}
+
+			uint64_t origRange = range;
+
+			range = split.leftCatMask;
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges);
+
+			range = split.rightCatMask;
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges);
+
+			range = origRange;
+
+			return make_pair(leftp.first + rightp.first, leftp.second + rightp.second);
 		},
 		[&](const RealLeaf& leaf) {
 			if((VarPtr)leaf.var != resp) fail();
 			if(leaf.stats.dataCount != data.size()) fail();
+
+			double avg = 0.0;
+			for(const vector<double>* point : data) {
+				avg += (*point)[leaf.var->dataSrcIdx];
+			}
+			avg /= (double)data.size();
+			double stddev = 0.0;
+			for(const vector<double>* point : data) {
+				double d = (*point)[leaf.var->dataSrcIdx] - avg;
+				stddev += d * d;
+			}
+			stddev = sqrt(stddev / (double)data.size());
+
+			if(abs(avg - leaf.stats.avg) > 1e-5) fail();
+			if(abs(stddev - leaf.stats.stddev) > 1e-5) fail();
+
+			return make_pair(leaf.stats.dataScore(*leaf.var), leafPenaltyTerm);
 		},
 		[&](const CatLeaf& leaf) {
 			if((VarPtr)leaf.var != resp) fail();
 			if(leaf.stats.dataCount != data.size()) fail();
+
+			vector<size_t> counts(leaf.var->cats.size());
+			for(const vector<double>* point : data) {
+				++counts.at((size_t)(*point)[leaf.var->dataSrcIdx]);
+			}
+
+			if(counts != leaf.stats.catCount) fail();
+
+			return make_pair(leaf.stats.dataScore(*leaf.var), leafPenaltyTerm);
 		}
 	);
 }
 
 void checkTree(
-	const TreePtr& tree,
+	const TreeResult& treeResult,
 	const vector<VarPtr>& pred,
 	const VarPtr& resp,
 	const vector<vector<double>>& data
 ) {
+	StructureScoreTerms sst = computeStructureScoreTerms(pred);
+
+	const TreePtr& tree = treeResult.tree;
 	vector<VarRange> ranges;
 	for(const VarPtr& var : pred) {
 		ranges.push_back(lambdaVisit(var,
@@ -105,7 +149,11 @@ void checkTree(
 		dataPtrs.push_back(&point);
 	}
 
-	checkTreeRecursion(tree, pred, resp, dataPtrs, ranges);
+	double dataScore, structureScore;
+	tie(dataScore, structureScore) = checkTreeRecursion(tree, pred, resp, sst.leafPenaltyTerm, dataPtrs, ranges);
+	structureScore += sst.normalizerTerm;
+	if(abs(dataScore - treeResult.dataScore) > 1e-5) fail();
+	if(abs(structureScore - treeResult.structureScore) > 1e-5) fail();
 }
 
 int main() {
@@ -167,14 +215,19 @@ int main() {
 			VarPtr resp = vars[respIdx];
 
 			double totalStructureProb = 0.0;
+			double bestScore = -numeric_limits<double>::infinity();
 			iterateTrees(
 				pred, resp, data,
 				[&](const TreeResult& treeResult) {
 					totalStructureProb += exp(treeResult.structureScore);
-					checkTree(treeResult.tree, pred, resp, data);
+					checkTree(treeResult, pred, resp, data);
+					bestScore = max(bestScore, treeResult.totalScore());
 				}
 			);
-			if(totalStructureProb < 0.999 || totalStructureProb > 1.001) fail();
+			if(abs(totalStructureProb - 1.0) > 1e-5) fail();
+			TreeResult opt = optimizeTree(pred, resp, data);
+			checkTree(opt, pred, resp, data);
+			if(abs(bestScore - opt.totalScore()) > 1e-5) fail();
 		}
 	}
 }

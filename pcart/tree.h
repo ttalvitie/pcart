@@ -24,6 +24,12 @@ template <typename T>
 struct Leaf : public BaseLeaf {
 	shared_ptr<const T> var;
 	LeafStats<T> stats;
+
+	template <typename U>
+	Leaf(const shared_ptr<const T>& var, const pair<U, typename T::Val>* data, size_t dataCount)
+		: var(var),
+		  stats(*var, data, dataCount)
+	{}
 };
 
 struct BaseSplit {
@@ -47,9 +53,18 @@ struct Split<CatVar> : public BaseSplit {
 struct TreeResult {
 	double dataScore;
 	double structureScore;
-	double totalScore;
 	TreePtr tree;
+
+	double totalScore() const {
+		return dataScore + structureScore;
+	}
 };
+
+TreeResult optimizeTree(
+	const vector<VarPtr>& predictors,
+	const VarPtr& response,
+	const vector<vector<double>>& data
+);
 
 void iterateTrees(
 	const vector<VarPtr>& predictors,

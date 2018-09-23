@@ -7,11 +7,17 @@
 namespace pcart {
 
 class Cell {
+public:
+	bool operator==(Cell other) const {
+		return repr == other.repr;
+	}
+
 private:
 	uint64_t repr;
 
 	friend class CellCtx;
 	friend class DataSplitter;
+	friend struct std::hash<Cell>;
 };
 
 class DataSplitter {
@@ -152,7 +158,7 @@ public:
 						info.putRepr(right, rightCatMask);
 
 						DataSplitter dataSplitter;
-						dataSplitter.mask = right.repr;
+						dataSplitter.mask = right.repr & info.mask;
 
 						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
 							return make_unique<Tree>(CatSplit{
@@ -214,4 +220,13 @@ private:
 	Cell root_;
 };
 
+}
+
+namespace std {
+template <>
+struct hash<pcart::Cell> {
+	size_t operator()(pcart::Cell cell) const {
+		return hash<uint64_t>()(cell.repr);
+	}
+};
 }

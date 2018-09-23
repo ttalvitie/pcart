@@ -22,6 +22,115 @@ vector<pair<Cell, typename R::Val>> extractData(
 }
 
 template <typename R>
+double optimizeTreeRecursion(
+	const CellCtx& cellCtx,
+	const shared_ptr<const R>& response,
+	double leafPenaltyTerm,
+	unordered_map<Cell, double>& mem,
+	Cell cell,
+	pair<Cell, typename R::Val>* data,
+	size_t dataCount
+) {
+	auto it = mem.find(cell);
+	if(it == mem.end()) {
+		LeafStats<R> stats(*response, data, dataCount);
+		double score = stats.dataScore(*response) + leafPenaltyTerm;
+		cellCtx.iterateDataSplits(
+			cell, data, dataCount, false,
+			[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+				double splitScore = optimizeTreeRecursion(
+					cellCtx, response, leafPenaltyTerm, mem, left, data, splitPos
+				);
+				splitScore += optimizeTreeRecursion(
+					cellCtx, response, leafPenaltyTerm, mem, right, data + splitPos, dataCount - splitPos
+				);
+				score = max(score, splitScore);
+			}
+		);
+		it = mem.emplace(cell, score).first;
+	}
+	return it->second;
+}
+
+template <typename R>
+TreeResult extractOptimumTree(
+	const CellCtx& cellCtx,
+	const shared_ptr<const R>& response,
+	double leafPenaltyTerm,
+	const unordered_map<Cell, double>& mem,
+	Cell cell,
+	pair<Cell, typename R::Val>* data,
+	size_t dataCount
+) {
+	TreeResult best;
+	Leaf<R> leaf(response, data, dataCount);
+	best.dataScore = leaf.stats.dataScore(*response);
+	best.structureScore = leafPenaltyTerm;
+	best.tree = make_unique<Tree>(move(leaf));
+
+	cellCtx.iterateDataSplits(
+		cell, data, dataCount, false,
+		[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+			auto leftIt = mem.find(left);
+			auto rightIt = mem.find(right);
+			if(leftIt == mem.end() || rightIt == mem.end()) {
+				fail("Internal error in extractOptimumTree");
+			}
+			double splitScore = leftIt->second + rightIt->second;
+			if(splitScore > best.totalScore()) {
+				TreeResult leftRes = extractOptimumTree(
+					cellCtx, response, leafPenaltyTerm, mem,
+					left, data, splitPos
+				);
+				TreeResult rightRes = extractOptimumTree(
+					cellCtx, response, leafPenaltyTerm, mem,
+					right, data + splitPos, dataCount - splitPos
+				);
+				best.dataScore = leftRes.dataScore + rightRes.dataScore;
+				best.structureScore = leftRes.structureScore + rightRes.structureScore;
+				best.tree = lazySplit(move(leftRes.tree), move(rightRes.tree));
+				if(abs(best.totalScore() - splitScore) > 0.01) {
+					fail("Internal error in extractOptimumTree");
+				}
+			}
+		}
+	);
+
+	return best;
+}
+
+template <typename R>
+TreeResult optimizeTree(
+	const vector<VarPtr>& predictors,
+	const shared_ptr<const R>& response,
+	const vector<vector<double>>& dataSrc
+) {
+	StructureScoreTerms sst = computeStructureScoreTerms(predictors);
+
+	CellCtx cellCtx(predictors);
+	typedef typename R::Val Val;
+	vector<pair<Cell, Val>> data = extractData(cellCtx, response, dataSrc);
+
+	unordered_map<Cell, double> mem;
+	double score = optimizeTreeRecursion(
+		cellCtx, response, sst.leafPenaltyTerm, mem,
+		cellCtx.root(), data.data(), data.size()
+	);
+
+	TreeResult ret = extractOptimumTree(
+		cellCtx, response, sst.leafPenaltyTerm, mem,
+		cellCtx.root(), data.data(), data.size()
+	);
+	if(abs(ret.totalScore() - score) > 0.01) {
+		fail("Internal error in optimizeTree");
+	}
+
+	ret.structureScore += sst.normalizerTerm;
+
+	return ret;
+}
+
+template <typename R>
 void iterateTreesRecursion(
 	const CellCtx& cellCtx,
 	const shared_ptr<const R>& response,
@@ -54,7 +163,6 @@ void iterateTreesRecursion(
 						[&](TreeResult rightRes) {
 							res.dataScore = leftRes.dataScore + rightRes.dataScore;
 							res.structureScore = leftRes.structureScore + rightRes.structureScore;
-							res.totalScore = res.dataScore + res.structureScore;
 							split.leftChild = move(leftRes.tree);
 							split.rightChild = move(rightRes.tree);
 			
@@ -72,12 +180,13 @@ void iterateTreesRecursion(
 		}
 	);
 
+	Leaf<R> leaf(response, data, dataCount);
+
 	TreeResult leafRes;
-	LeafStats<R> stats(*response, data, dataCount);
-	leafRes.dataScore = stats.score(*response);
+	leafRes.dataScore = leaf.stats.dataScore(*response);
 	leafRes.structureScore = leafPenaltyTerm;
-	leafRes.totalScore = leafRes.dataScore + leafRes.structureScore;
-	leafRes.tree = make_unique<Tree>(Leaf<R>{ {}, response, move(stats)});
+	leafRes.tree = make_unique<Tree>(move(leaf));
+
 	f(move(leafRes));
 }
 
@@ -93,13 +202,13 @@ void iterateTrees(
 	CellCtx cellCtx(predictors);
 	typedef typename R::Val Val;
 	vector<pair<Cell, Val>> data = extractData(cellCtx, response, dataSrc);
+
 	iterateTreesRecursion<R>(
 		cellCtx, response, cellCtx.root(), data.data(), data.size(), sst.leafPenaltyTerm,
 		[&](TreeResult src) {
 			TreeResult res;
 			res.dataScore = src.dataScore;
 			res.structureScore = sst.normalizerTerm + src.structureScore;
-			res.totalScore = res.dataScore + res.structureScore;
 			res.tree = move(src.tree);
 			f((const TreeResult&)res);
 			src.tree = move(res.tree);
@@ -162,6 +271,16 @@ void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string p
 
 }
 
+TreeResult optimizeTree(
+	const vector<VarPtr>& predictors,
+	const VarPtr & response,
+	const vector<vector<double>>& data
+) {
+	return lambdaVisit(response, [&](const auto& response) {
+		return optimizeTree(predictors, response, data);
+	});
+}
+
 void iterateTrees(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,
@@ -178,4 +297,3 @@ void printTree(const TreePtr& tree, ostream& out) {
 }
 
 }
-

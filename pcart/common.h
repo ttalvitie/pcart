@@ -6,10 +6,12 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -32,6 +34,7 @@ using std::make_unique;
 using std::max;
 using std::min;
 using std::move;
+using std::numeric_limits;
 using std::ostream;
 using std::pair;
 using std::round;
@@ -43,6 +46,7 @@ using std::tie;
 using std::tuple;
 using std::uint64_t;
 using std::unique_ptr;
+using std::unordered_map;
 using std::variant;
 using std::vector;
 
