@@ -60,7 +60,23 @@ typedef shared_ptr<const RealVar> RealVarPtr;
 typedef shared_ptr<const CatVar> CatVarPtr;
 typedef variant<RealVarPtr, CatVarPtr> VarPtr;
 
-RealVarPtr createRealVar(string name, size_t dataIdx, double minVal, double maxVal, size_t maxSubdiv);
-CatVarPtr createCatVar(string name, size_t dataIdx, vector<string> catNames);
+RealVarPtr createRealVar(
+	string name,
+	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
+	double minVal, double maxVal, // The range of allowed values for the variable
+	size_t maxSubdiv, // Maximum number of times the variable can be subdivided into half
+	// Hyperparameters (nu, lambda, barmu, a), the defaults are possibly ok for N(0, 1) normalized data
+	double nu = 1.0,
+	double lambda = 1.0,
+	double barmu = 0.0,
+	double a = 1.0
+);
+
+CatVarPtr createCatVar(
+	string name,
+	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
+	const vector<string>& catNames, // catNames[i] = the name of the category i
+	double alpha = 0.5 // Hyperparameter alpha for every category, default is Jeffrey's prior
+);
 
 }

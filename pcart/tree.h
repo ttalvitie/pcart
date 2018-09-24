@@ -60,6 +60,11 @@ struct TreeResult {
 	}
 };
 
+// Returns the optimum tree for given predictor variables, response variable and data.
+// In each point vector data[i], the value for each variable is given by the element
+// in the index defined by the dataSrcIdx field of the variable. The values for a
+// categorical variable with n categories should be represented by integer values
+// 0, 1, ..., n-1.
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,

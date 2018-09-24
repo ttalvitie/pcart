@@ -2,33 +2,47 @@
 
 namespace pcart {
 
-RealVarPtr createRealVar(string name, size_t dataIdx, double minVal, double maxVal, size_t maxSubdiv) {
+RealVarPtr createRealVar(
+	string name,
+	size_t dataSrcIdx,
+	double minVal, double maxVal,
+	size_t maxSubdiv,
+	double nu,
+	double lambda,
+	double barmu,
+	double a
+) {
 	RealVar var;
 
 	var.name = move(name);
-	var.dataSrcIdx = dataIdx;
+	var.dataSrcIdx = dataSrcIdx;
 	var.minVal = minVal;
 	var.maxVal = maxVal;
 	var.maxSubdiv = maxSubdiv;
 
-	var.nu = 1.0;
-	var.lambda = 1.0;
-	var.barmu = 0.0;
-	var.a = 1.0;
+	var.nu = nu;
+	var.lambda = lambda;
+	var.barmu = barmu;
+	var.a = a;
 
 	return make_shared<RealVar>(move(var));
 }
 
-CatVarPtr createCatVar(string name, size_t dataIdx, vector<string> catNames) {
+CatVarPtr createCatVar(
+	string name,
+	size_t dataSrcIdx,
+	const vector<string>& catNames,
+	double alpha
+) {
 	CatVar var;
 
 	var.name = move(name);
-	var.dataSrcIdx = dataIdx;
+	var.dataSrcIdx = dataSrcIdx;
 
 	var.cats.resize(catNames.size());
 	for(size_t i = 0; i < catNames.size(); ++i) {
 		var.cats[i].name = catNames[i];
-		var.cats[i].alpha = 0.5;
+		var.cats[i].alpha = alpha;
 	}
 
 	return make_shared<CatVar>(move(var));
