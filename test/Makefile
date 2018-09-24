@@ -5,7 +5,7 @@ SRCS := $(shell find . -name '*.cpp')
 OBJS := $(SRCS:%.cpp=%.o)
 DEPS := $(SRCS:%.cpp=%.d)
 
-.PHONY: clean all
+.PHONY: clean all FORCE
 
 all: test
 
