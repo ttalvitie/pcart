@@ -11,10 +11,10 @@ RealVarPtr createRealVar(string name, size_t dataIdx, double minVal, double maxV
 	var.maxVal = maxVal;
 	var.maxSubdiv = maxSubdiv;
 
-	var.nu = 0.0;
-	var.lambda = 0.0;
+	var.nu = 1.0;
+	var.lambda = 1.0;
 	var.barmu = 0.0;
-	var.a = 0.0;
+	var.a = 1.0;
 
 	return make_shared<RealVar>(move(var));
 }

@@ -230,4 +230,10 @@ int main() {
 			if(abs(bestScore - opt.totalScore()) > 1e-5) fail();
 		}
 	}
+
+	TreeResult opt = optimizeTree({A, B, C, D}, E, data);
+	checkTree(opt, {A, B, C, D}, E, data);
+	if(abs(opt.totalScore() + 81.3847) > 0.001) fail();
+
+	return 0;
 }
