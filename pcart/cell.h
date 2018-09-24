@@ -8,6 +8,8 @@ namespace pcart {
 
 class Cell {
 public:
+	Cell() {}
+
 	bool operator==(Cell other) const {
 		return repr == other.repr;
 	}
@@ -22,6 +24,8 @@ private:
 
 class DataSplitter {
 public:
+	DataSplitter() {}
+
 	template <typename T>
 	size_t split(pair<Cell, T>* data, size_t dataCount) const {
 		size_t a = 0;

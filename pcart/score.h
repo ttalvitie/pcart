@@ -85,7 +85,6 @@ struct LeafStats<CatVar> {
 		}
 		score += lgamma(alpha_sum);
 
-		double count_sum = 0.0;
 		for(size_t i = 0; i < var.cats.size(); ++i) {
 			score += lgamma((double)catCount[i] + var.cats[i].alpha);
 		}
