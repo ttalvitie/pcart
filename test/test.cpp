@@ -166,19 +166,26 @@ int main() {
 	vector<VarPtr> vars = { A, B, C, D, E };
 
 	mt19937 rng(1234);
+	auto randInt = [&](int a, int b) {
+		return rng() % (b - a + 1);
+	};
+	auto randReal = [&](double a, double b) {
+		double t = (double)rng() / (double)((uint64_t)1 << 32);
+		return (1 - t) * a + t * b;
+	};
 	vector<vector<double>> data;
 	for(int i = 0; i < 1000; ++i) {
 		vector<double> point(5);
-		point[1] = uniform_int_distribution<int>(0, 2)(rng);
+		point[1] = randInt(0, 2);
 		if(point[1] == 1) {
-			point[0] = uniform_real_distribution<double>(-60.0, -10.0)(rng);
+			point[0] = randReal(-60.0, -10.0);
 		} else {
-			point[0] = uniform_real_distribution<double>(-30.0, 10.0)(rng);
+			point[0] = randReal(-30.0, 10.0);
 		}
 
-		point[3] = uniform_real_distribution<double>(1.5, 2.5)(rng);
+		point[3] = randReal(1.5, 2.5);
 
-		double x = uniform_real_distribution<double>(-1.0, 1.0)(rng);
+		double x = randReal(-1.0, 1.0);
 		point[0] += 30.0 * x;
 		point[3] += 0.1 * x;
 
@@ -231,9 +238,23 @@ int main() {
 		}
 	}
 
-	TreeResult opt = optimizeTree({A, B, C, D}, E, data);
-	checkTree(opt, {A, B, C, D}, E, data);
-	if(abs(opt.totalScore() + 81.3847) > 0.001) fail();
+	{
+		TreeResult opt = optimizeTree({ A, B, C, D }, E, data);
+		checkTree(opt, { A, B, C, D }, E, data);
+		if(abs(opt.totalScore() + 58.045) > 0.1) fail();
+	}
+
+	{
+		TreeResult opt = optimizeTree({ C, D, E }, B, data);
+		checkTree(opt, { C, D, E }, B, data);
+		if(abs(opt.totalScore() + 1082.87) > 0.1) fail();
+	}
+
+	{
+		TreeResult opt = optimizeTree({ B, C, D, E }, A, data);
+		checkTree(opt, { B, C, D, E }, A, data);
+		if(abs(opt.totalScore() + 4133.78) > 0.1) fail();
+	}
 
 	return 0;
 }
