@@ -1,6 +1,6 @@
 CXX ?= g++
 ARCHFLAG ?=
-CFLAGS ?= -std=c++17 -Wall -march=native -O2 $(ARCHFLAG) -I..
+CFLAGS ?= -std=c++17 -Wall -O2 $(ARCHFLAG) -I..
 SRCS := $(shell find . -name '*.cpp')
 OBJS := $(SRCS:%.cpp=%.o)
 DEPS := $(SRCS:%.cpp=%.d)
