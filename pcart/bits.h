@@ -2,9 +2,13 @@
 
 #include <pcart/common.h>
 
-#if defined(_MSC_VER) // Only for MSVC
+#ifdef _MSC_VER // Only for MSVC
 #   include <intrin.h>
-#   pragma intrinsic(_BitScanReverse64) // topOne64
+#	ifdef _M_IX86
+#		pragma intrinsic(_BitScanReverse) // topOne64
+#	else
+#		pragma intrinsic(_BitScanReverse64) // topOne64
+#	endif
 #	pragma warning (disable : 4146) // bottomOne64
 #endif
 
@@ -21,9 +25,17 @@ inline constexpr uint64_t bit64(size_t pos) {
 }
 
 inline int clz64(uint64_t x) {
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 	unsigned long idx;
+#	ifdef _M_IX86
+	if(_BitScanReverse(&idx, (uint32_t)(x >> 32))) {
+		idx += 32;
+	} else {
+		_BitScanReverse(&idx, (uint32_t)x);
+	}
+#	else
 	_BitScanReverse64(&idx, x);
+#	endif
 	return 63 - idx;
 #else
 	static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "The case unsigned long long != uint64_t is not implemented");

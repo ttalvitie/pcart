@@ -101,7 +101,7 @@ public:
 					t *= (double)bit64(var->maxSubdiv);
 					t = floor(t);
 					t = max(t, 0.0);
-					size_t repr = (size_t)t;
+					uint64_t repr = (uint64_t)t;
 					repr = min(repr, ones64(var->maxSubdiv));
 					info.putRepr(cell, repr);
 				},
