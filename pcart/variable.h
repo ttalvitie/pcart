@@ -43,6 +43,10 @@ struct CatVar : public BaseVar {
 
 	vector<CatInfo> cats;
 
+	// If enabled, the hyperparameter alpha is scaled by the size of the leaf cell in the data space.
+	// Otherwise, the same hyperparameter is used in each leaf cell.
+	bool bdeu;
+
 	size_t parseDataSrcVal(const vector<double>& src) const {
 		if(dataSrcIdx >= src.size()) {
 			fail("Too short vector in data source");
@@ -77,6 +81,12 @@ CatVarPtr createCatVar(
 	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
 	const vector<string>& catNames, // catNames[i] = the name of the category i
 	double alpha = 0.5 // Hyperparameter alpha for every category, default is Jeffrey's prior
+);
+CatVarPtr createBDeuCatVar(
+	string name,
+	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
+	const vector<string>& catNames, // catNames[i] = the name of the category i
+	double ess = 1.0 // Equivalent sample size
 );
 
 }

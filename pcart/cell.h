@@ -146,7 +146,7 @@ public:
 							});
 						};
 
-						f(info.var, left, right, dataSplitter, lazySplit);
+						f(info.var, left, right, 0.5, 0.5, dataSplitter, lazySplit);
 					}
 				},
 				[&](const CatVarPtr& var) {
@@ -171,7 +171,10 @@ public:
 							});
 						};
 
-						f(info.var, left, right, dataSplitter, lazySplit);
+						double leftCoef = (double)popcount64(leftCatMask) / (double)popcount64(repr);
+						double rightCoef = 1.0 - leftCoef;
+
+						f(info.var, left, right, leftCoef, rightCoef, dataSplitter, lazySplit);
 					}
 				}
 			);
@@ -193,12 +196,13 @@ public:
 		iterateSplits(cell, [&](
 			const VarPtr& var,
 			Cell left, Cell right,
+			double leftCoef, double rightCoef,
 			DataSplitter dataSplitter,
 			auto& lazySplit
 		) {
 			size_t splitPos = dataSplitter.split(data, dataCount);
 			if(allowEmpty || (splitPos != 0 && splitPos != dataCount)) {
-				f(var, left, right, splitPos, lazySplit);
+				f(var, left, right, leftCoef, rightCoef, splitPos, lazySplit);
 			}
 		});
 	}

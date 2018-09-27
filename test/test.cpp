@@ -15,7 +15,8 @@ pair<double, double> checkTreeRecursion(
 	const VarPtr& resp,
 	double leafPenaltyTerm,
 	const vector<const vector<double>*> data,
-	vector<VarRange>& ranges
+	vector<VarRange>& ranges,
+	double cellSize
 ) {
 	auto getPredIdx = [&](const VarPtr& var) -> size_t {
 		for(size_t i = 0; i < pred.size(); ++i) {
@@ -44,11 +45,11 @@ pair<double, double> checkTreeRecursion(
 			pair<double, double> origRange = range;
 
 			range.second = split.splitVal;
-			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges);
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges, 0.5 * cellSize);
 
 			range = origRange;
 			range.first = split.splitVal;
-			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges);
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges, 0.5 * cellSize);
 
 			range = origRange;
 
@@ -77,10 +78,12 @@ pair<double, double> checkTreeRecursion(
 			uint64_t origRange = range;
 
 			range = split.leftCatMask;
-			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges);
+			double leftCellSize = cellSize * (double)popcount64(range) / (double)popcount64(origRange);
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges, leftCellSize);
 
 			range = split.rightCatMask;
-			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges);
+			double rightCellSize = cellSize * (double)popcount64(range) / (double)popcount64(origRange);
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges, rightCellSize);
 
 			range = origRange;
 
@@ -105,7 +108,7 @@ pair<double, double> checkTreeRecursion(
 			if(abs(avg - leaf.stats.avg) > 1e-5) fail();
 			if(abs(stddev - leaf.stats.stddev) > 1e-5) fail();
 
-			return make_pair(leaf.stats.dataScore(*leaf.var), leafPenaltyTerm);
+			return make_pair(leaf.stats.dataScore(*leaf.var, cellSize), leafPenaltyTerm);
 		},
 		[&](const CatLeaf& leaf) {
 			if((VarPtr)leaf.var != resp) fail();
@@ -118,7 +121,7 @@ pair<double, double> checkTreeRecursion(
 
 			if(counts != leaf.stats.catCount) fail();
 
-			return make_pair(leaf.stats.dataScore(*leaf.var), leafPenaltyTerm);
+			return make_pair(leaf.stats.dataScore(*leaf.var, cellSize), leafPenaltyTerm);
 		}
 	);
 }
@@ -150,7 +153,7 @@ void checkTree(
 	}
 
 	double dataScore, structureScore;
-	tie(dataScore, structureScore) = checkTreeRecursion(tree, pred, resp, sst.leafPenaltyTerm, dataPtrs, ranges);
+	tie(dataScore, structureScore) = checkTreeRecursion(tree, pred, resp, sst.leafPenaltyTerm, dataPtrs, ranges, 1.0);
 	structureScore += sst.normalizerTerm;
 	if(abs(dataScore - treeResult.dataScore) > 1e-5) fail();
 	if(abs(structureScore - treeResult.structureScore) > 1e-5) fail();
@@ -158,7 +161,7 @@ void checkTree(
 
 int main() {
 	RealVarPtr A = createRealVar("A", 0, -127.0, 51.0, 2);
-	CatVarPtr B = createCatVar("B", 1, { "x", "y", "z" });
+	CatVarPtr B = createBDeuCatVar("B", 1, { "x", "y", "z" });
 	CatVarPtr C = createCatVar("C", 2, { "u", "v" });
 	RealVarPtr D = createRealVar("D", 3, 1.0, 3.0, 1);
 	CatVarPtr E = createCatVar("E", 4, { "a", "b" });
@@ -247,7 +250,7 @@ int main() {
 	{
 		TreeResult opt = optimizeTree({ C, D, E }, B, data);
 		checkTree(opt, { C, D, E }, B, data);
-		if(abs(opt.totalScore() + 1082.87) > 0.1) fail();
+		if(abs(opt.totalScore() + 1093.61) > 0.1) fail();
 	}
 
 	{

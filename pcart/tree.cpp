@@ -28,21 +28,30 @@ double optimizeTreeRecursion(
 	double leafPenaltyTerm,
 	unordered_map<Cell, double>& mem,
 	Cell cell,
+	double cellSize,
 	pair<Cell, typename R::Val>* data,
 	size_t dataCount
 ) {
 	auto it = mem.find(cell);
 	if(it == mem.end()) {
 		LeafStats<R> stats(*response, data, dataCount);
-		double score = stats.dataScore(*response) + leafPenaltyTerm;
+		double score = stats.dataScore(*response, cellSize) + leafPenaltyTerm;
 		cellCtx.iterateDataSplits(
 			cell, data, dataCount, false,
-			[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+			[&](
+				const VarPtr& var,
+				Cell left, Cell right,
+				double leftCoef, double rightCoef,
+				size_t splitPos,
+				auto& lazySplit
+			) {
 				double splitScore = optimizeTreeRecursion(
-					cellCtx, response, leafPenaltyTerm, mem, left, data, splitPos
+					cellCtx, response, leafPenaltyTerm, mem,
+					left, leftCoef * cellSize, data, splitPos
 				);
 				splitScore += optimizeTreeRecursion(
-					cellCtx, response, leafPenaltyTerm, mem, right, data + splitPos, dataCount - splitPos
+					cellCtx, response, leafPenaltyTerm, mem,
+					right, rightCoef * cellSize, data + splitPos, dataCount - splitPos
 				);
 				score = max(score, splitScore);
 			}
@@ -59,18 +68,25 @@ TreeResult extractOptimumTree(
 	double leafPenaltyTerm,
 	const unordered_map<Cell, double>& mem,
 	Cell cell,
+	double cellSize,
 	pair<Cell, typename R::Val>* data,
 	size_t dataCount
 ) {
 	TreeResult best;
 	Leaf<R> leaf(response, data, dataCount);
-	best.dataScore = leaf.stats.dataScore(*response);
+	best.dataScore = leaf.stats.dataScore(*response, cellSize);
 	best.structureScore = leafPenaltyTerm;
 	best.tree = make_unique<Tree>(move(leaf));
 
 	cellCtx.iterateDataSplits(
 		cell, data, dataCount, false,
-		[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+		[&](
+			const VarPtr& var,
+			Cell left, Cell right,
+			double leftCoef, double rightCoef,
+			size_t splitPos,
+			auto& lazySplit
+		) {
 			auto leftIt = mem.find(left);
 			auto rightIt = mem.find(right);
 			if(leftIt == mem.end() || rightIt == mem.end()) {
@@ -80,11 +96,11 @@ TreeResult extractOptimumTree(
 			if(splitScore > best.totalScore()) {
 				TreeResult leftRes = extractOptimumTree(
 					cellCtx, response, leafPenaltyTerm, mem,
-					left, data, splitPos
+					left, leftCoef * cellSize, data, splitPos
 				);
 				TreeResult rightRes = extractOptimumTree(
 					cellCtx, response, leafPenaltyTerm, mem,
-					right, data + splitPos, dataCount - splitPos
+					right, rightCoef * cellSize, data + splitPos, dataCount - splitPos
 				);
 				best.dataScore = leftRes.dataScore + rightRes.dataScore;
 				best.structureScore = leftRes.structureScore + rightRes.structureScore;
@@ -114,12 +130,12 @@ TreeResult optimizeTree(
 	unordered_map<Cell, double> mem;
 	double score = optimizeTreeRecursion(
 		cellCtx, response, sst.leafPenaltyTerm, mem,
-		cellCtx.root(), data.data(), data.size()
+		cellCtx.root(), 1.0, data.data(), data.size()
 	);
 
 	TreeResult ret = extractOptimumTree(
 		cellCtx, response, sst.leafPenaltyTerm, mem,
-		cellCtx.root(), data.data(), data.size()
+		cellCtx.root(), 1.0, data.data(), data.size()
 	);
 	if(abs(ret.totalScore() - score) > 0.01) {
 		fail("Internal error in optimizeTree");
@@ -135,6 +151,7 @@ void iterateTreesRecursion(
 	const CellCtx& cellCtx,
 	const shared_ptr<const R>& response,
 	Cell cell,
+	double cellSize,
 	pair<Cell, typename R::Val>* data,
 	size_t dataCount,
 	double leafPenaltyTerm,
@@ -142,7 +159,13 @@ void iterateTreesRecursion(
 ) {
 	cellCtx.iterateDataSplits(
 		cell, data, dataCount, true,
-		[&](const VarPtr& var, Cell left, Cell right, size_t splitPos, auto& lazySplit) {
+		[&](
+			const VarPtr& var,
+			Cell left, Cell right,
+			double leftCoef, double rightCoef,
+			size_t splitPos,
+			auto& lazySplit
+		) {
 			TreeResult res;
 			res.tree = lazySplit(nullptr, nullptr);
 			BaseSplit& split = *lambdaVisit(*res.tree,
@@ -156,10 +179,10 @@ void iterateTreesRecursion(
 			);
 
 			iterateTreesRecursion<R>(
-				cellCtx, response, left, data, splitPos, leafPenaltyTerm,
+				cellCtx, response, left, leftCoef * cellSize, data, splitPos, leafPenaltyTerm,
 				[&](TreeResult leftRes) {
 					iterateTreesRecursion<R>(
-						cellCtx, response, right, data + splitPos, dataCount - splitPos, leafPenaltyTerm,
+						cellCtx, response, right, rightCoef * cellSize, data + splitPos, dataCount - splitPos, leafPenaltyTerm,
 						[&](TreeResult rightRes) {
 							res.dataScore = leftRes.dataScore + rightRes.dataScore;
 							res.structureScore = leftRes.structureScore + rightRes.structureScore;
@@ -183,7 +206,7 @@ void iterateTreesRecursion(
 	Leaf<R> leaf(response, data, dataCount);
 
 	TreeResult leafRes;
-	leafRes.dataScore = leaf.stats.dataScore(*response);
+	leafRes.dataScore = leaf.stats.dataScore(*response, cellSize);
 	leafRes.structureScore = leafPenaltyTerm;
 	leafRes.tree = make_unique<Tree>(move(leaf));
 
@@ -204,7 +227,7 @@ void iterateTrees(
 	vector<pair<Cell, Val>> data = extractData(cellCtx, response, dataSrc);
 
 	iterateTreesRecursion<R>(
-		cellCtx, response, cellCtx.root(), data.data(), data.size(), sst.leafPenaltyTerm,
+		cellCtx, response, cellCtx.root(), 1.0, data.data(), data.size(), sst.leafPenaltyTerm,
 		[&](TreeResult src) {
 			TreeResult res;
 			res.dataScore = src.dataScore;

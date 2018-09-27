@@ -30,7 +30,7 @@ struct LeafStats<RealVar> {
 		stddev = sqrt(stddev / (double)dataCount);
 	}
 
-	double dataScore(const RealVar& var) const {
+	double dataScore(const RealVar& var, double cellSize) const {
 		if(dataCount == 0) {
 			return 0.0;
 		}
@@ -71,22 +71,24 @@ struct LeafStats<CatVar> {
 		}
 	}
 
-	double dataScore(const CatVar& var) const {
+	double dataScore(const CatVar& var, double cellSize) const {
 		if(dataCount == 0) {
 			return 0.0;
 		}
+
+		double coef = var.bdeu ? cellSize : 1.0;
 
 		double score = 0.0;
 		
 		double alpha_sum = 0.0;
 		for(const CatInfo& info : var.cats) {
-			score -= lgamma(info.alpha);
-			alpha_sum += info.alpha;
+			score -= lgamma(info.alpha * coef);
+			alpha_sum += info.alpha * coef;
 		}
 		score += lgamma(alpha_sum);
 
 		for(size_t i = 0; i < var.cats.size(); ++i) {
-			score += lgamma((double)catCount[i] + var.cats[i].alpha);
+			score += lgamma((double)catCount[i] + var.cats[i].alpha * coef);
 		}
 		score -= lgamma((double)dataCount + alpha_sum);
 

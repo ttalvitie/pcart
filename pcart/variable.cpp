@@ -45,6 +45,31 @@ CatVarPtr createCatVar(
 		var.cats[i].alpha = alpha;
 	}
 
+	var.bdeu = false;
+
+	return make_shared<CatVar>(move(var));
+}
+CatVarPtr createBDeuCatVar(
+	string name,
+	size_t dataSrcIdx,
+	const vector<string>& catNames,
+	double ess
+) {
+	CatVar var;
+
+	var.name = move(name);
+	var.dataSrcIdx = dataSrcIdx;
+
+	double alpha = ess / (double)catNames.size();
+
+	var.cats.resize(catNames.size());
+	for(size_t i = 0; i < catNames.size(); ++i) {
+		var.cats[i].name = catNames[i];
+		var.cats[i].alpha = alpha;
+	}
+
+	var.bdeu = true;
+
 	return make_shared<CatVar>(move(var));
 }
 
