@@ -4,11 +4,12 @@
 
 #ifdef _MSC_VER // Only for MSVC
 #   include <intrin.h>
-#	pragma intrinsic(__popcnt64) // popcount64
 #	ifdef _M_IX86
 #		pragma intrinsic(_BitScanReverse) // topOne64
+#		pragma intrinsic(__popcnt) // popcount64
 #	else
 #		pragma intrinsic(_BitScanReverse64) // topOne64
+#		pragma intrinsic(__popcnt64) // popcount64
 #	endif
 #	pragma warning (disable : 4146) // bottomOne64
 #endif
@@ -50,7 +51,11 @@ inline constexpr uint64_t bottomOne64(uint64_t x) {
 
 inline int popcount64(uint64_t x) {
 #ifdef _MSC_VER
+#	ifdef _M_IX86
+	return (int)__popcnt((uint32_t)(x >> 32)) + (int)__popcnt((uint32_t)x);
+#	else
 	return (int)__popcnt64(x);
+#	endif
 #else
 	static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "The case unsigned long long != uint64_t is not implemented");
 	return __builtin_popcountll(x);
