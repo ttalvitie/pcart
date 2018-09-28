@@ -14,6 +14,10 @@ RealVarPtr createRealVar(
 ) {
 	RealVar var;
 
+	if(minVal > maxVal) {
+		fail("Real variable ", name, " has minVal > maxVal");
+	}
+
 	var.name = move(name);
 	var.dataSrcIdx = dataSrcIdx;
 	var.minVal = minVal;
@@ -38,6 +42,10 @@ CatVarPtr createCatVar(
 
 	var.name = move(name);
 	var.dataSrcIdx = dataSrcIdx;
+
+	if(catNames.empty()) {
+		fail("Cat variable ", name, " has no categories");
+	}
 
 	var.cats.resize(catNames.size());
 	for(size_t i = 0; i < catNames.size(); ++i) {

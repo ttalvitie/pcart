@@ -20,12 +20,14 @@ namespace pcart {
 
 using std::abs;
 using std::ceil;
+using std::cin;
 using std::cerr;
 using std::cout;
 using std::exp;
 using std::floor;
 using std::function;
 using std::get;
+using std::isfinite;
 using std::log;
 using std::make_pair;
 using std::make_shared;
@@ -42,6 +44,7 @@ using std::shared_ptr;
 using std::size_t;
 using std::sqrt;
 using std::string;
+using std::stringstream;
 using std::tie;
 using std::tuple;
 using std::uint64_t;

@@ -1,77 +1,124 @@
 #include <random>
 #include <pcart/tree.h>
+#include <pcart/bits.h>
 
-using namespace std;
 using namespace pcart;
 
-int main() {
-	cerr << "TODO: CLI\n";
-	// Define variables (see ../pcart/variable.h for info on setting hyperparameters; we use the defaults)
-	VarPtr A = createRealVar("A", 0, -2.0, 2.0, 2); // data index 0, range [-2, 2], max 2 subdivisions
-	VarPtr B = createCatVar("B", 1, { "a", "b", "c" }); // data index 1, categories {a, b, c}
-	VarPtr C = createCatVar("C", 2, { "x", "y" }); // data index 2, categories {x, y}
-	VarPtr D = createCatVar("D", 3, { "0", "1" }); // data index 3, categories {0, 1}
+double readDouble() {
+	double x;
+	cin >> x;
+	if(!isfinite(x)) {
+		fail("Input contains infinite value ", x);
+	}
+	return x;
+}
 
-	// Random generator
-	mt19937 rng(random_device{}());
-
-	// Try different data set sizes
-	for(size_t N = 32; N <= 4096; N *= 2) {
-		// Generate data from a decision tree that predicts D from {A, B, C} and try to learn it back
-		vector<vector<double>> data(N);
-		for(size_t i = 0; i < N; ++i) {
-			data[i].resize(4);
-
-			// As defined by the data index parameter, the value indices are as follows
-			double& valA = data[i][0];
-			double& valB = data[i][1];
-			double& valC = data[i][2];
-			double& valD = data[i][3];
-
-			// In this example, we generate A, B, C uniformly at random
-			valA = uniform_real_distribution<double>(-2.0, 2.0)(rng);
-
-			// For categorical variables, the categories are given by 0-based integer indices
-			valB = (double)uniform_int_distribution<int>(0, 2)(rng);
-			valC = (double)uniform_int_distribution<int>(0, 1)(rng);
-
-			// Determine D using a decision tree
-			if(valA < 0.0) {
-				if(valB == 0.0 || valB == 2.0) { // B = a or B = c
-					if(valC == 0.0) { // C = x
-						if(valA < -1.0) {
-							valD = bernoulli_distribution(0.1)(rng);
-						} else { // A >= -1
-							if(valB == 0.0) { // B = a
-								valD = bernoulli_distribution(0.2)(rng);
-							} else { // B = c
-								valD = bernoulli_distribution(0.9)(rng);
-							}
-						}
-					} else { // C = y
-						valD = bernoulli_distribution(0.5)(rng);
-					}
-				} else { // B = b
-					valD = bernoulli_distribution(0.4)(rng);
-				}
-			} else { // A >= 1
-				if(valC == 0.0) { // C = x
-					valD = bernoulli_distribution(0.1)(rng);
-				} else { // C = y
-					valD = bernoulli_distribution(0.2)(rng);
+void writeTree(const TreePtr& tree) {
+	lambdaVisit(*tree,
+		[&](const RealSplit& split) {
+			cout << "SPLIT REAL " << split.var->name << " " << split.splitVal << "\n";
+			writeTree(split.leftChild);
+			writeTree(split.rightChild);
+		},
+		[&](const CatSplit& split) {
+			cout << "SPLIT CAT " << split.var->name;
+			for(size_t i = 0; i < split.var->cats.size(); ++i) {
+				if(split.leftCatMask & bit64(i)) {
+					cout << " " << i;
 				}
 			}
+			cout << " -1";
+			for(size_t i = 0; i < split.var->cats.size(); ++i) {
+				if(split.rightCatMask & bit64(i)) {
+					cout << " " << i;
+				}
+			}
+			cout << " -1\n";
+			writeTree(split.leftChild);
+			writeTree(split.rightChild);
+		},
+		[&](const RealLeaf& leaf) {
+			cout << "LEAF REAL " << leaf.stats.avg << " " << leaf.stats.stddev << "\n";
+		},
+		[&](const CatLeaf& leaf) {
+			cout << "LEAF CAT";
+			for(size_t x : leaf.stats.catCount) {
+				cout << " " << x;
+			}
+			cout << "\n";
 		}
+	);
+}
 
-		// Optimize a decision tree based on the data
-		TreeResult res = optimizeTree({ A, B, C }, D, data);
+int main() {
+	cin.exceptions(cin.eofbit | cin.failbit | cin.badbit);
 
-		// Print the tree and its score
-		cout << "Sample size: " << N << '\n';
-		cout << "Score: " << res.totalScore() << '\n';
-		printTree(res.tree);
-		cout << '\n';
+	size_t predictorCount, dataCount;
+	cin >> predictorCount >> dataCount;
+
+	vector<VarPtr> predictors;
+	for(size_t i = 0; i < predictorCount; ++i) {
+		stringstream varName;
+		varName << i;
+		string type;
+		cin >> type;
+		if(type == "REAL") {
+			double minVal = readDouble();
+			double maxVal = readDouble();
+			size_t maxSubdiv;
+			cin >> maxSubdiv;
+			predictors.push_back(createRealVar(varName.str(), i, minVal, maxVal, maxSubdiv));
+		} else if(type == "CAT") {
+			size_t catCount;
+			cin >> catCount;
+			predictors.push_back(createCatVar(varName.str(), i, vector<string>(catCount)));
+		} else {
+			fail("Unknown predictor variable type ", type);
+		}
 	}
+
+	VarPtr response;
+	string type;
+	cin >> type;
+	if(type == "REAL") {
+		double minVal = readDouble();
+		double maxVal = readDouble();
+		size_t maxSubdiv;
+		cin >> maxSubdiv;
+		double nu = readDouble();
+		double lambda = readDouble();
+		double barmu = readDouble();
+		double a = readDouble();
+		response = createRealVar("response", predictorCount, minVal, maxVal, maxSubdiv, nu, lambda, barmu, a);
+	} else if(type == "CAT") {
+		size_t catCount;
+		cin >> catCount;
+		double alpha = readDouble();
+		response = createCatVar("response", predictorCount, vector<string>(catCount), alpha);
+	} else if(type == "BDEU_CAT") {
+		size_t catCount;
+		cin >> catCount;
+		double ess = readDouble();
+		response = createBDeuCatVar("response", predictorCount, vector<string>(catCount), ess);
+	} else {
+		fail("Unknown response variable type ", type);
+	}
+
+	vector<vector<double>> data(dataCount);
+	for(size_t i = 0; i < dataCount; ++i) {
+		data[i].resize(predictorCount + 1);
+		for(double& x : data[i]) {
+			x = readDouble();
+		}
+	}
+
+	TreeResult res = optimizeTree(predictors, response, data);
+
+	cout << "OK\n";
+	cout.precision(16);
+	cout << res.totalScore() << "\n";
+
+	writeTree(res.tree);
 
 	return 0;
 }
