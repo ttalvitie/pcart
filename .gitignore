@@ -36,3 +36,7 @@ x64
 Debug
 Release
 .vs
+
+# R
+.Rproj.user
+.Rhistory
