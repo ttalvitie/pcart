@@ -2,19 +2,19 @@ optimize.pcart <- function() {
   sysname <- Sys.info()['sysname']
   machine <- Sys.info()['machine']
   if(sysname == "Windows") {
-    if(machine == "x86-64") {
+    if(endsWith(machine, "64")) {
       bin_name <- "pcartcli-win64.exe"
     } else {
       bin_name <- "pcartcli-win32.exe"
     }
   } else if(sysname == "Linux") {
-    if(machine == "x86-64") {
+    if(endsWith(machine, "64")) {
       bin_name <- "pcartcli-lin64"
     } else {
       bin_name <- "pcartcli-lin32"
     }
   } else if(sysname == "Darwin") {
-    if(machine == "x86-64") {
+    if(endsWith(machine, "64")) {
       bin_name <- "pcartcli-mac64"
     } else {
       bin_name <- "pcartcli-mac32"
