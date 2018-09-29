@@ -38,8 +38,38 @@ call.pcartcli <- function(input) {
   return(score)
 }
 
+to.factor <- function(x) {
+  # Ensures that missing levels are not removed
+  if(class(x) == "factor") {
+    return(x)
+  } else {
+    return(factor(x))
+  }
+}
+
 opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
-  return(call.pcartcli(paste0("0 1\n", type, " 2 0.5\n0\n")))
+  if(class(data) != "data.frame") {
+    stop("data should be a data.frame")
+  }
+  if(length(response) != 1) {
+    stop("response should have length 1")
+  }
+  vars = c(predictors, response)
+  if(any(duplicated(vars))) {
+    stop("no column label should appear twice in c(predictors, response)")
+  }
+
+  mydata <- data.frame(lapply(data[vars], to.factor))
+
+  types <- c(rep("CAT", length(predictors)), type)
+  varstr <- paste(types, unlist(lapply(lapply(mydata, levels), length)), collapse=" ")
+  varstr <- paste(varstr, param)
+
+  datastr <- paste(t(data.matrix(mydata)) - 1, sep=' ', collapse=' ')
+
+  input <- paste(length(predictors), nrow(data), varstr, datastr)
+
+  return(call.pcartcli(input))
 }
 
 opt.pcart.cat <- function(data, predictors, response, alpha=0.5) {
