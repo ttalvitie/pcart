@@ -1,4 +1,4 @@
-optimize.pcart <- function() {
+call.pcartcli <- function(input) {
   sysname <- Sys.info()['sysname']
   machine <- Sys.info()['machine']
   if(sysname == "Windows") {
@@ -24,7 +24,7 @@ optimize.pcart <- function() {
   }
 
   bin_path <- system.file("bin", bin_name, package="rpcart")
-  res <- system2(bin_path, c(), input="0 1\nCAT 2 0.5\n0\n", stdout=TRUE, stderr=TRUE)
+  res <- system2(bin_path, c(), input=input, stdout=TRUE, stderr=TRUE)
 
   if((!is.null(attr(res, 'status')) && attr(res, 'status') != 0)) {
     stop(paste("Running", bin_name, "failed"))
@@ -36,4 +36,16 @@ optimize.pcart <- function() {
   }
 
   return(score)
+}
+
+opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
+  return(call.pcartcli(paste0("0 1\n", type, " 2 0.5\n0\n")))
+}
+
+opt.pcart.cat <- function(data, predictors, response, alpha=0.5) {
+  return(opt.pcart.cat.internal(data, predictors, response, "CAT", alpha))
+}
+
+opt.pcart.cat.bdeu <- function(data, predictors, response, ess=1.0) {
+  return(opt.pcart.cat.internal(data, predictors, response, "BDEU_CAT", ess))
 }
