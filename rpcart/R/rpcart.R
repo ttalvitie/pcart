@@ -35,7 +35,9 @@ call.pcartcli <- function(input) {
     stop(paste("Running", bin_name, "resulted in an invalid output"))
   }
 
-  return(score)
+  tree <- res[3:length(res)]
+
+  return(list(score=score, tree=tree))
 }
 
 to.factor <- function(x) {
@@ -54,7 +56,7 @@ opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
   if(length(response) != 1) {
     stop("response should have length 1")
   }
-  vars = c(predictors, response)
+  vars <- c(predictors, response)
   if(any(duplicated(vars))) {
     stop("no column label should appear twice in c(predictors, response)")
   }
@@ -69,7 +71,30 @@ opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
 
   input <- paste(length(predictors), nrow(data), varstr, datastr)
 
-  return(call.pcartcli(input))
+  callresult <- call.pcartcli(input)
+  score <- callresult$score
+  tree <- callresult$tree
+
+  pos <- 0
+  prettify <- function(pre1, pre) {
+    pos <<- pos + 1
+    line <- strsplit(tree[[pos]], " +")[[1]]
+    if(line[1] == "SPLIT") {
+      varidx <- as.numeric(line[3]) + 1
+      cats <- line[4:(length(line)-1)]
+      cats[cats == -1] = "|"
+      tree[[pos]] <<- paste0(pre1, "-+ ", predictors[varidx], ": ", paste(cats, collapse=" "))
+      prettify(paste0(pre, " |"), paste0(pre, " |"))
+      prettify(paste0(pre, " `"), paste0(pre, "  "))
+    } else {
+      tree[[pos]] <<- paste0(pre1, "-- ", response, ": ", paste(line[3:length(line)], collapse=" "))
+    }
+  }
+  prettify("", "")
+
+  tree <- paste0(paste(tree, collapse="\n"), "\n")
+
+  return(list(score=score, tree=tree))
 }
 
 opt.pcart.cat <- function(data, predictors, response, alpha=0.5) {
