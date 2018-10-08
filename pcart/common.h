@@ -52,6 +52,7 @@ using std::unique_ptr;
 using std::unordered_map;
 using std::variant;
 using std::vector;
+using std::visit;
 
 const double pi = 4.0 * atan(1.0);
 
