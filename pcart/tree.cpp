@@ -21,6 +21,13 @@ vector<pair<Cell, typename R::Val>> extractData(
 	return data;
 }
 
+bool useAdaptCell(const RealVar& response) {
+	return true;
+}
+bool useAdaptCell(const CatVar& response) {
+	return !response.bdeu;
+}
+
 template <typename R>
 double optimizeTreeRecursion(
 	const CellCtx& cellCtx,
@@ -37,7 +44,7 @@ double optimizeTreeRecursion(
 		LeafStats<R> stats(*response, data, dataCount);
 		double score = stats.dataScore(*response, cellSize) + leafPenaltyTerm;
 		cellCtx.iterateDataSplits(
-			cell, data, dataCount, false,
+			cell, data, dataCount, false, useAdaptCell(*response),
 			[&](
 				const VarPtr& var,
 				Cell left, Cell right,
@@ -79,7 +86,7 @@ TreeResult extractOptimumTree(
 	best.tree = make_unique<Tree>(move(leaf));
 
 	cellCtx.iterateDataSplits(
-		cell, data, dataCount, false,
+		cell, data, dataCount, false, useAdaptCell(*response),
 		[&](
 			const VarPtr& var,
 			Cell left, Cell right,
@@ -115,6 +122,64 @@ TreeResult extractOptimumTree(
 	return best;
 }
 
+bool catsOrder(
+	const pair<CatVarPtr, uint64_t>& a,
+	const pair<CatVarPtr, uint64_t>& b
+) {
+	return a.first.get() < b.first.get();
+}
+
+void fixAdaptedTreeSplitsRecursion(
+	vector<pair<CatVarPtr, uint64_t>>& cats,
+	TreePtr& tree
+) {
+	lambdaVisit(*tree,
+		[&](CatSplit& split) {
+			auto it = lower_bound(
+				cats.begin(), cats.end(),
+				make_pair(split.var, 0),
+				catsOrder
+			);
+			if(
+				it == cats.end() ||
+				it->first != split.var ||
+				(split.leftCatMask & ~it->second) ||
+				(split.rightCatMask & ~it->second)
+			) {
+				fail("Internal error in optimizeTree");
+			}
+
+			split.rightCatMask = it->second ^ split.leftCatMask;
+
+			uint64_t orig = it->second;
+			it->second = split.leftCatMask;
+			fixAdaptedTreeSplitsRecursion(cats, split.leftChild);
+			it->second = split.rightCatMask;
+			fixAdaptedTreeSplitsRecursion(cats, split.rightChild);
+			it->second = orig;
+		},
+		[&](RealSplit& split) {
+			fixAdaptedTreeSplitsRecursion(cats, split.leftChild);
+			fixAdaptedTreeSplitsRecursion(cats, split.rightChild);
+		},
+		[&](BaseLeaf& leaf) {}
+	);
+}
+
+void fixAdaptedTreeSplits(const vector<VarPtr>& predictors, TreePtr& tree) {
+	vector<pair<CatVarPtr, uint64_t>> cats;
+	for(const VarPtr& var : predictors) {
+		lambdaVisit(var,
+			[&](const CatVarPtr& var) {
+				cats.emplace_back(var, ones64(var->cats.size()));
+			},
+			[&](const RealVarPtr& var) {}
+		);
+	}
+	sort(cats.begin(), cats.end(), catsOrder);
+	fixAdaptedTreeSplitsRecursion(cats, tree);
+}
+
 template <typename R>
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
@@ -143,6 +208,10 @@ TreeResult optimizeTree(
 
 	ret.structureScore += sst.normalizerTerm;
 
+	if(useAdaptCell(*response)) {
+		fixAdaptedTreeSplits(predictors, ret.tree);
+	}
+
 	return ret;
 }
 
@@ -158,7 +227,7 @@ void iterateTreesRecursion(
 	function<TreeResult(TreeResult)> f
 ) {
 	cellCtx.iterateDataSplits(
-		cell, data, dataCount, true,
+		cell, data, dataCount, true, false,
 		[&](
 			const VarPtr& var,
 			Cell left, Cell right,
@@ -267,7 +336,7 @@ void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string p
 			auto writeMask = [&](uint64_t mask) {
 				bool first = true;
 				for(size_t i = 0; i < split.var->cats.size(); ++i) {
-					if(mask &bit64(i)) {
+					if(mask & bit64(i)) {
 						if(!first) {
 							out << ", ";
 						}

@@ -187,8 +187,13 @@ public:
 		pair<Cell, T>* data,
 		size_t dataCount,
 		bool allowEmpty,
+		bool adaptCell,
 		F f
 	) const {
+		if(allowEmpty && adaptCell) {
+			fail("iterateDataSplits called with both allowEmpty and adaptCell set to true, which is not supported");
+		}
+
 		if(!allowEmpty && dataCount <= 1) {
 			return;
 		}
@@ -202,6 +207,10 @@ public:
 		) {
 			size_t splitPos = dataSplitter.split(data, dataCount);
 			if(allowEmpty || (splitPos != 0 && splitPos != dataCount)) {
+				if(adaptCell) {
+					left = adaptCellToData_(left, data, splitPos);
+					right = adaptCellToData_(right, data + splitPos, dataCount - splitPos);
+				}
 				f(var, left, right, leftCoef, rightCoef, splitPos, lazySplit);
 			}
 		});
@@ -221,6 +230,17 @@ private:
 			cell.repr ^= (cell.repr ^ (repr << startBit)) & mask;
 		}
 	};
+
+	template <typename T>
+	Cell adaptCellToData_(Cell cell, const pair<Cell, T>* data, size_t dataCount) const {
+		uint64_t dataOr = 0;
+		for(size_t i = 0; i < dataCount; ++i) {
+			dataOr |= data[i].first.repr;
+		}
+		Cell adapted;
+		adapted.repr = (realMask_ & cell.repr) | (catMask_ & dataOr);
+		return adapted;
+	}
 
 	vector<VarInfo> varInfo_;
 	uint64_t realMask_;

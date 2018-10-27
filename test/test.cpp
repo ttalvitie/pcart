@@ -61,6 +61,9 @@ pair<double, double> checkTreeRecursion(
 			if(split.leftCatMask & ~range) fail();
 			if(split.rightCatMask & ~range) fail();
 			if(split.leftCatMask & split.rightCatMask) fail();
+			if((split.leftCatMask | split.rightCatMask) != range) {
+				fail("Split category masks do not form a partition of the remaining categories");
+			}
 
 			vector<const vector<double>*> leftData;
 			vector<const vector<double>*> rightData;
@@ -257,6 +260,52 @@ int main() {
 		TreeResult opt = optimizeTree({ B, C, D, E }, A, data);
 		checkTree(opt, { B, C, D, E }, A, data);
 		if(abs(opt.totalScore() + 4133.78) > 0.1) fail();
+	}
+
+	for(int c = 0; c < 3; ++c)  {
+		// Missing categories, different types of response variables
+		CatVarPtr A = createCatVar("A", 0, { "p", "q" });
+		CatVarPtr B = createCatVar("B", 1, { "a", "b", "c" });
+		VarPtr C;
+		switch(c) {
+			case 0: C = createCatVar("C", 2, { "x", "y" }); break;
+			case 1: C = createBDeuCatVar("C", 2, { "x", "y" }); break;
+			case 2: C = createRealVar("C", 2, 0.0, 1.0, 3); break;
+		}
+
+		vector<vector<double>> data2;
+		for(int i = 0; i < 50; ++i) {
+			data2.push_back({ 0, 0, 0 });
+		}
+		for(int i = 0; i < 50; ++i) {
+			data2.push_back({ 0, 1, 1 });
+		}
+		for(int i = 0; i < 50; ++i) {
+			data2.push_back({ 1, 0, 0 });
+		}
+		for(int i = 0; i < 50; ++i) {
+			data2.push_back({ 1, 1, 0 });
+		}
+		for(int i = 0; i < 50; ++i) {
+			data2.push_back({ 1, 2, 1 });
+		}
+
+		vector<VarPtr> pred = { A, B };
+		VarPtr resp = C;
+
+		double bestScore = -numeric_limits<double>::infinity();
+		iterateTrees(
+			pred, resp, data2,
+			[&](const TreeResult& treeResult) {
+				checkTree(treeResult, pred, resp, data2);
+				bestScore = max(bestScore, treeResult.totalScore());
+			}
+		);
+
+		TreeResult opt = optimizeTree(pred, resp, data2);
+		checkTree(opt, pred, resp, data2);
+
+		if(abs(opt.totalScore() - bestScore) > 0.0001) fail();
 	}
 
 	return 0;
