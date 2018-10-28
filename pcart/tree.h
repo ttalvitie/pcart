@@ -25,10 +25,10 @@ struct Leaf : public BaseLeaf {
 	shared_ptr<const T> var;
 	LeafStats<T> stats;
 
-	template <typename U>
-	Leaf(const shared_ptr<const T>& var, const pair<U, typename T::Val>* data, size_t dataCount)
+	template <typename F>
+	Leaf(const shared_ptr<const T>& var, size_t dataCount, F getVal)
 		: var(var),
-		  stats(*var, data, dataCount)
+		  stats(*var, dataCount, getVal)
 	{}
 };
 
@@ -69,6 +69,18 @@ TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,
 	const vector<vector<double>>& data
+);
+
+// Like optimizeTree, but returns the tree corresponding to the full table with
+// given predictors (the tree that makes all the possible splits). The only part
+// that optimized is the discretization: each real predictor is discretized into
+// 2..maxDiscretizationBins quantiles. The structure score of the result is
+// always 0.
+TreeResult optimizeFullTable(
+	const vector<VarPtr>& predictors,
+	const VarPtr& response,
+	const vector<vector<double>>& data,
+	size_t maxDiscretizationBins
 );
 
 void iterateTrees(

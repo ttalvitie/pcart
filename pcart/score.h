@@ -13,18 +13,18 @@ struct LeafStats<RealVar> {
 	double stddev;
 	size_t dataCount;
 
-	template <typename T>
-	LeafStats(const RealVar& var, const pair<T, double>* data, size_t dataCount)
+	template <typename F>
+	LeafStats(const RealVar& var, size_t dataCount, F getVal)
 		: avg(0.0),
 		  stddev(0.0),
 		  dataCount(dataCount)
 	{
 		for(size_t i = 0; i < dataCount; ++i) {
-			avg += data[i].second;
+			avg += getVal(i);
 		}
 		avg /= (double)dataCount;
 		for(size_t i = 0; i < dataCount; ++i) {
-			double d = data[i].second - avg;
+			double d = getVal(i) - avg;
 			stddev += d * d;
 		}
 		stddev = sqrt(stddev / (double)dataCount);
@@ -61,13 +61,13 @@ struct LeafStats<CatVar> {
 	std::vector<size_t> catCount;
 	size_t dataCount;
 
-	template <typename T>
-	LeafStats(const CatVar& var, const pair<T, size_t>* data, size_t dataCount)
+	template <typename F>
+	LeafStats(const CatVar& var, size_t dataCount, F getVal)
 		: catCount(var.cats.size(), 0),
 		  dataCount(dataCount)
 	{
 		for(size_t i = 0; i < dataCount; ++i) {
-			++catCount[data[i].second];
+			++catCount[getVal(i)];
 		}
 	}
 

@@ -14,6 +14,7 @@ pair<double, double> checkTreeRecursion(
 	const vector<VarPtr>& pred,
 	const VarPtr& resp,
 	double leafPenaltyTerm,
+	bool fullTable,
 	const vector<const vector<double>*> data,
 	vector<VarRange>& ranges,
 	double cellSize
@@ -31,7 +32,11 @@ pair<double, double> checkTreeRecursion(
 		[&](const RealSplit& split) {
 			size_t i = getPredIdx(split.var);
 			pair<double, double>& range = get<pair<double, double>>(ranges[i]);
-			if(abs(0.5 * (range.first + range.second) - split.splitVal) > 1e-6) fail();
+			if(fullTable) {
+				if(split.splitVal < range.first || split.splitVal > range.second) fail();
+			} else {
+				if(abs(0.5 * (range.first + range.second) - split.splitVal) > 1e-6) fail();
+			}
 
 			vector<const vector<double>*> leftData;
 			vector<const vector<double>*> rightData;
@@ -45,11 +50,11 @@ pair<double, double> checkTreeRecursion(
 			pair<double, double> origRange = range;
 
 			range.second = split.splitVal;
-			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges, 0.5 * cellSize);
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, fullTable, leftData, ranges, 0.5 * cellSize);
 
 			range = origRange;
 			range.first = split.splitVal;
-			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges, 0.5 * cellSize);
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, fullTable, rightData, ranges, 0.5 * cellSize);
 
 			range = origRange;
 
@@ -82,11 +87,11 @@ pair<double, double> checkTreeRecursion(
 
 			range = split.leftCatMask;
 			double leftCellSize = cellSize * (double)popcount64(range) / (double)popcount64(origRange);
-			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, leftData, ranges, leftCellSize);
+			auto leftp = checkTreeRecursion(split.leftChild, pred, resp, leafPenaltyTerm, fullTable, leftData, ranges, leftCellSize);
 
 			range = split.rightCatMask;
 			double rightCellSize = cellSize * (double)popcount64(range) / (double)popcount64(origRange);
-			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, rightData, ranges, rightCellSize);
+			auto rightp = checkTreeRecursion(split.rightChild, pred, resp, leafPenaltyTerm, fullTable, rightData, ranges, rightCellSize);
 
 			range = origRange;
 
@@ -133,9 +138,15 @@ void checkTree(
 	const TreeResult& treeResult,
 	const vector<VarPtr>& pred,
 	const VarPtr& resp,
-	const vector<vector<double>>& data
+	const vector<vector<double>>& data,
+	bool fullTable = false
 ) {
-	StructureScoreTerms sst = computeStructureScoreTerms(pred);
+	StructureScoreTerms sst;
+	if(fullTable) {
+		sst = StructureScoreTerms{ 0.0, 0.0 };
+	} else {
+		sst = computeStructureScoreTerms(pred);
+	}
 
 	const TreePtr& tree = treeResult.tree;
 	vector<VarRange> ranges;
@@ -156,9 +167,18 @@ void checkTree(
 	}
 
 	double dataScore, structureScore;
-	tie(dataScore, structureScore) = checkTreeRecursion(tree, pred, resp, sst.leafPenaltyTerm, dataPtrs, ranges, 1.0);
+	tie(dataScore, structureScore) = checkTreeRecursion(tree, pred, resp, sst.leafPenaltyTerm, fullTable, dataPtrs, ranges, 1.0);
 	structureScore += sst.normalizerTerm;
-	if(abs(dataScore - treeResult.dataScore) > 1e-5) fail();
+	bool checkDataScore;
+	lambdaVisit(resp,
+		[&](const RealVarPtr& var) {
+			checkDataScore = true;
+		},
+		[&](const CatVarPtr& var) {
+			checkDataScore = !var->bdeu;
+		}
+	);
+	if(checkDataScore && abs(dataScore - treeResult.dataScore) > 1e-5) fail();
 	if(abs(structureScore - treeResult.structureScore) > 1e-5) fail();
 }
 
@@ -241,6 +261,9 @@ int main() {
 			TreeResult opt = optimizeTree(pred, resp, data);
 			checkTree(opt, pred, resp, data);
 			if(abs(bestScore - opt.totalScore()) > 1e-5) fail();
+
+			TreeResult ft = optimizeFullTable(pred, resp, data, 7);
+			checkTree(ft, pred, resp, data, true);
 		}
 	}
 
