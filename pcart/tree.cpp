@@ -654,7 +654,7 @@ void iterateTrees(
 }
 
 void printTree(const TreePtr& tree, ostream& out) {
-	printTreeRecursion(tree, cout, "", "");
+	printTreeRecursion(tree, out, "", "");
 }
 
 }
