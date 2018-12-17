@@ -53,6 +53,23 @@ void writeTree(const TreePtr& tree) {
 int main() {
 	cin.exceptions(cin.eofbit | cin.failbit | cin.badbit);
 
+	bool useStructureScore = true;
+	while(true) {
+		while(isspace(cin.peek())) {
+			cin.get();
+		}
+		if(cin.peek() != '%') {
+			break;
+		}
+		string flag;
+		cin >> flag;
+		if(flag == "%NO_USE_STRUCTURE_SCORE") {
+			useStructureScore = false;
+		} else {
+			fail("Unknown flag");
+		}
+	}
+
 	size_t predictorCount, dataCount;
 	cin >> predictorCount >> dataCount;
 
@@ -112,7 +129,7 @@ int main() {
 		}
 	}
 
-	TreeResult res = optimizeTree(predictors, response, data);
+	TreeResult res = optimizeTree(predictors, response, data, useStructureScore);
 
 	cout << "OK\n";
 	cout.precision(16);

@@ -184,9 +184,16 @@ template <typename R>
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
 	const shared_ptr<const R>& response,
-	const vector<vector<double>>& dataSrc
+	const vector<vector<double>>& dataSrc,
+	bool useStructureScore
 ) {
-	StructureScoreTerms sst = computeStructureScoreTerms(predictors);
+	StructureScoreTerms sst;
+	if(useStructureScore) {
+		sst = computeStructureScoreTerms(predictors);
+	} else {
+		sst.leafPenaltyTerm = 0.0;
+		sst.normalizerTerm = 0.0;
+	}
 
 	CellCtx cellCtx(predictors);
 	typedef typename R::Val Val;
@@ -624,10 +631,11 @@ void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string p
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
 	const VarPtr & response,
-	const vector<vector<double>>& data
+	const vector<vector<double>>& data,
+	bool useStructureScore
 ) {
 	return lambdaVisit(response, [&](const auto& response) {
-		return optimizeTree(predictors, response, data);
+		return optimizeTree(predictors, response, data, useStructureScore);
 	});
 }
 

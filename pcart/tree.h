@@ -64,11 +64,12 @@ struct TreeResult {
 // In each point vector data[i], the value for each variable is given by the element
 // in the index defined by the dataSrcIdx field of the variable. The values for a
 // categorical variable with n categories should be represented by integer values
-// 0, 1, ..., n-1.
+// 0, 1, ..., n-1. Set useStructureScore to false to set all structure scores to zero.
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
 	const VarPtr& response,
-	const vector<vector<double>>& data
+	const vector<vector<double>>& data,
+	bool useStructureScore = true
 );
 
 // Like optimizeTree, but returns the tree corresponding to the full table with
