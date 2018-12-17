@@ -49,7 +49,7 @@ to.factor <- function(x) {
   }
 }
 
-opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
+opt.pcart.cat.internal <- function(data, predictors, response, type, param, use_structure_score) {
   if(class(data) != "data.frame") {
     stop("data should be a data.frame")
   }
@@ -69,7 +69,11 @@ opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
 
   datastr <- paste(t(data.matrix(mydata)) - 1, sep=' ', collapse=' ')
 
-  input <- paste(length(predictors), nrow(data), varstr, datastr)
+  flagstr <- ""
+  if(!use_structure_score) {
+    flagstr <- "%NO_USE_STRUCTURE_SCORE"
+  }
+  input <- paste(flagstr, length(predictors), nrow(data), varstr, datastr)
 
   callresult <- call.pcartcli(input)
   score <- callresult$score
@@ -97,10 +101,10 @@ opt.pcart.cat.internal <- function(data, predictors, response, type, param) {
   return(list(score=score, tree=tree))
 }
 
-opt.pcart.cat <- function(data, predictors, response, alpha=0.5) {
-  return(opt.pcart.cat.internal(data, predictors, response, "CAT", alpha))
+opt.pcart.cat <- function(data, predictors, response, alpha=0.5, use_structure_score=TRUE) {
+  return(opt.pcart.cat.internal(data, predictors, response, "CAT", alpha, use_structure_score))
 }
 
-opt.pcart.cat.bdeu <- function(data, predictors, response, ess=1.0) {
-  return(opt.pcart.cat.internal(data, predictors, response, "BDEU_CAT", ess))
+opt.pcart.cat.bdeu <- function(data, predictors, response, ess=1.0, use_structure_score=TRUE) {
+  return(opt.pcart.cat.internal(data, predictors, response, "BDEU_CAT", ess, use_structure_score))
 }
