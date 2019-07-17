@@ -38,6 +38,7 @@ struct CatInfo {
 	string name;
 	double alpha;
 };
+
 struct CatVar : public BaseVar {
 	typedef size_t Val;
 
@@ -60,9 +61,29 @@ struct CatVar : public BaseVar {
 	}
 };
 
+struct OrdVar : public BaseVar {
+	typedef size_t Val;
+
+	vector<CatInfo> cats;
+	double kappa;
+
+	size_t parseDataSrcVal(const vector<double>& src) const {
+		if(dataSrcIdx >= src.size()) {
+			fail("Too short vector in data source");
+		}
+		double srcVal = src[dataSrcIdx];
+		size_t val = (size_t)srcVal;
+		if(srcVal != (double)val || val >= cats.size()) {
+			fail("Invalid value ", srcVal, " for variable ", name, " in data source");
+		}
+		return val;
+	}
+};
+
 typedef shared_ptr<const RealVar> RealVarPtr;
 typedef shared_ptr<const CatVar> CatVarPtr;
-typedef variant<RealVarPtr, CatVarPtr> VarPtr;
+typedef shared_ptr<const OrdVar> OrdVarPtr;
+typedef variant<RealVarPtr, CatVarPtr, OrdVarPtr> VarPtr;
 
 RealVarPtr createRealVar(
 	string name,
@@ -87,6 +108,14 @@ CatVarPtr createBDeuCatVar(
 	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
 	const vector<string>& catNames, // catNames[i] = the name of the category i
 	double ess = 1.0 // Equivalent sample size
+);
+
+OrdVarPtr createOrdVar(
+	string name,
+	size_t dataSrcIdx, // Index of the value of the variable in data points vectors
+	const vector<string>& catNames, // catNames[i] = the name of the category i
+	double alpha = 0.5, // Hyperparameter alpha for every category, default is Jeffrey's prior
+	double kappa = 0.5
 );
 
 }

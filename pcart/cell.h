@@ -58,6 +58,9 @@ public:
 				},
 				[&](const CatVarPtr& var) {
 					return var->cats.size();
+				},
+				[&](const OrdVarPtr& var) {
+					return var->cats.size();
 				}
 			);
 			varInfo_.push_back({var, bitPos, bitCount, 0});
@@ -69,7 +72,7 @@ public:
 		}
 		
 		realMask_ = 0;
-		catMask_ = 0;
+		catOrdMask_ = 0;
 		root_.repr = 0;
 		for(VarInfo& info : varInfo_) {
 			info.mask = ones64(info.bitCount) << info.startBit;
@@ -79,7 +82,11 @@ public:
 					info.putRepr(root_, (uint64_t)-1 << 1);
 				},
 				[&](const CatVarPtr& var) {
-					catMask_ |= info.mask;
+					catOrdMask_ |= info.mask;
+					info.putRepr(root_, (uint64_t)-1);
+				},
+				[&](const OrdVarPtr& var) {
+					catOrdMask_ |= info.mask;
 					info.putRepr(root_, (uint64_t)-1);
 				}
 			);
@@ -106,6 +113,10 @@ public:
 					info.putRepr(cell, repr);
 				},
 				[&](const CatVarPtr& var) {
+					size_t val = var->parseDataSrcVal(src);
+					info.putRepr(cell, bit64(val));
+				},
+				[&](const OrdVarPtr& var) {
 					size_t val = var->parseDataSrcVal(src);
 					info.putRepr(cell, bit64(val));
 				}
@@ -166,6 +177,32 @@ public:
 
 						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
 							return make_unique<Tree>(CatSplit{
+								move(leftChild), move(rightChild),
+								var, leftCatMask, rightCatMask
+							});
+						};
+
+						double leftCoef = (double)popcount64(leftCatMask) / (double)popcount64(repr);
+						double rightCoef = 1.0 - leftCoef;
+
+						f(info.var, left, right, leftCoef, rightCoef, dataSplitter, lazySplit);
+					}
+				},
+				[&](const OrdVarPtr& var) {
+					uint64_t rightCatMask = repr ^ bottomOne64(repr);
+					for(; rightCatMask; rightCatMask ^= bottomOne64(rightCatMask)) {
+						uint64_t leftCatMask = repr ^ rightCatMask;
+
+						Cell left = cell;
+						info.putRepr(left, leftCatMask);
+						Cell right = cell;
+						info.putRepr(right, rightCatMask);
+
+						DataSplitter dataSplitter;
+						dataSplitter.mask = right.repr & info.mask;
+
+						auto lazySplit = [&](TreePtr leftChild, TreePtr rightChild) {
+							return make_unique<Tree>(OrdSplit{
 								move(leftChild), move(rightChild),
 								var, leftCatMask, rightCatMask
 							});
@@ -238,13 +275,13 @@ private:
 			dataOr |= data[i].first.repr;
 		}
 		Cell adapted;
-		adapted.repr = (realMask_ & cell.repr) | (catMask_ & dataOr);
+		adapted.repr = (realMask_ & cell.repr) | (catOrdMask_ & dataOr);
 		return adapted;
 	}
 
 	vector<VarInfo> varInfo_;
 	uint64_t realMask_;
-	uint64_t catMask_;
+	uint64_t catOrdMask_;
 	Cell root_;
 };
 

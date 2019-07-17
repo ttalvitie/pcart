@@ -80,18 +80,77 @@ struct LeafStats<CatVar> {
 
 		double score = 0.0;
 		
-		double alpha_sum = 0.0;
+		double alphaSum = 0.0;
 		for(const CatInfo& info : var.cats) {
 			score -= lgamma(info.alpha * coef);
-			alpha_sum += info.alpha * coef;
+			alphaSum += info.alpha * coef;
 		}
-		score += lgamma(alpha_sum);
+		score += lgamma(alphaSum);
 
 		for(size_t i = 0; i < var.cats.size(); ++i) {
 			score += lgamma((double)catCount[i] + var.cats[i].alpha * coef);
 		}
-		score -= lgamma((double)dataCount + alpha_sum);
+		score -= lgamma((double)dataCount + alphaSum);
 
+		return score;
+	}
+};
+template <>
+struct LeafStats<OrdVar> {
+	std::vector<size_t> catCount;
+	size_t dataCount;
+
+	template <typename F>
+	LeafStats(const OrdVar& var, size_t dataCount, F getVal)
+		: catCount(var.cats.size(), 0),
+		  dataCount(dataCount)
+	{
+		for(size_t i = 0; i < dataCount; ++i) {
+			++catCount[getVal(i)];
+		}
+	}
+
+	double dataScore(const OrdVar& var, double cellSize) const {
+		double alphaSum = 0.0;
+		for(const CatInfo& info : var.cats) {
+			alphaSum += info.alpha;
+		}
+
+		double logKappa = log(var.kappa);
+
+		if(var.cats.size() > 63) {
+			fail("More than 63 categories in an ordinal variable not supported");
+		}
+		double suffixes[64];
+		suffixes[var.cats.size()] = 0.0;
+
+		size_t segStart = var.cats.size();
+		while(segStart --> 0) {
+			suffixes[segStart] = -numeric_limits<double>::infinity();
+
+			double segAlpha = 0.0;
+			size_t segCount = 0;
+			double base = logKappa;
+
+			for(size_t segEnd = segStart + 1; segEnd <= var.cats.size(); ++segEnd) {
+				size_t segSize = segEnd - segStart;
+				segAlpha += var.cats[segEnd - 1].alpha;
+				segCount += catCount[segEnd - 1];
+				base -= lgamma((double)catCount[segEnd - 1] + 1.0);
+
+				double factor = base;
+				factor += lgamma((double)segCount + segAlpha);
+				factor -= lgamma(segAlpha);
+				factor += lgamma((double)segCount + 1.0);
+				factor -= (double)segCount * log((double)segSize);
+
+				suffixes[segStart] = addLog(suffixes[segStart], suffixes[segEnd] + factor);
+			}
+		}
+
+		double score = suffixes[0];
+		score += lgamma(alphaSum);
+		score -= lgamma((double)dataCount + alphaSum);
 		return score;
 	}
 };

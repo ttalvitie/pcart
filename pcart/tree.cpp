@@ -27,6 +27,9 @@ bool useAdaptCell(const RealVar& response) {
 bool useAdaptCell(const CatVar& response) {
 	return !response.bdeu;
 }
+bool useAdaptCell(const OrdVar& response) {
+	return true;
+}
 
 template <typename R>
 double optimizeTreeRecursion(
@@ -128,9 +131,16 @@ bool catsOrder(
 ) {
 	return a.first.get() < b.first.get();
 }
+bool ordsOrder(
+	const pair<OrdVarPtr, uint64_t>& a,
+	const pair<OrdVarPtr, uint64_t>& b
+) {
+	return a.first.get() < b.first.get();
+}
 
 void fixAdaptedTreeSplitsRecursion(
 	vector<pair<CatVarPtr, uint64_t>>& cats,
+	vector<pair<OrdVarPtr, uint64_t>>& ords,
 	TreePtr& tree
 ) {
 	lambdaVisit(*tree,
@@ -153,14 +163,44 @@ void fixAdaptedTreeSplitsRecursion(
 
 			uint64_t orig = it->second;
 			it->second = split.leftCatMask;
-			fixAdaptedTreeSplitsRecursion(cats, split.leftChild);
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.leftChild);
 			it->second = split.rightCatMask;
-			fixAdaptedTreeSplitsRecursion(cats, split.rightChild);
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.rightChild);
+			it->second = orig;
+		},
+		[&](OrdSplit& split) {
+			auto it = lower_bound(
+				ords.begin(), ords.end(),
+				make_pair(split.var, 0),
+				ordsOrder
+			);
+
+			uint64_t leftPart = bottomOne64(split.rightCatMask) - 1;
+			if(
+				it == ords.end() ||
+				it->first != split.var ||
+				(split.leftCatMask & ~it->second) ||
+				(split.rightCatMask & ~it->second) ||
+				!split.leftCatMask ||
+				!split.rightCatMask ||
+				(split.leftCatMask & ~leftPart)
+			) {
+				fail("Internal error in optimizeTree");
+			}
+
+			split.leftCatMask = it->second & leftPart;
+			split.rightCatMask = it->second & ~leftPart;
+
+			uint64_t orig = it->second;
+			it->second = split.leftCatMask;
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.leftChild);
+			it->second = split.rightCatMask;
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.rightChild);
 			it->second = orig;
 		},
 		[&](RealSplit& split) {
-			fixAdaptedTreeSplitsRecursion(cats, split.leftChild);
-			fixAdaptedTreeSplitsRecursion(cats, split.rightChild);
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.leftChild);
+			fixAdaptedTreeSplitsRecursion(cats, ords, split.rightChild);
 		},
 		[&](BaseLeaf& leaf) {}
 	);
@@ -168,16 +208,21 @@ void fixAdaptedTreeSplitsRecursion(
 
 void fixAdaptedTreeSplits(const vector<VarPtr>& predictors, TreePtr& tree) {
 	vector<pair<CatVarPtr, uint64_t>> cats;
+	vector<pair<OrdVarPtr, uint64_t>> ords;
 	for(const VarPtr& var : predictors) {
 		lambdaVisit(var,
 			[&](const CatVarPtr& var) {
 				cats.emplace_back(var, ones64(var->cats.size()));
 			},
+			[&](const OrdVarPtr& var) {
+				ords.emplace_back(var, ones64(var->cats.size()));
+			},
 			[&](const RealVarPtr& var) {}
 		);
 	}
 	sort(cats.begin(), cats.end(), catsOrder);
-	fixAdaptedTreeSplitsRecursion(cats, tree);
+	sort(ords.begin(), ords.end(), ordsOrder);
+	fixAdaptedTreeSplitsRecursion(cats, ords, tree);
 }
 
 template <typename R>
@@ -239,27 +284,27 @@ vector<double> computeDisc(const vector<double>& vals, size_t count) {
 	return ret;
 }
 
-template <typename F>
+template <typename V, typename T, typename F>
 void cycleDiscsRecursion(
-	vector<pair<RealVarPtr, vector<vector<double>>>>& opt,
-	vector<pair<RealVarPtr, vector<double>>>& res,
+	vector<pair<V, vector<vector<T>>>>& opt,
+	vector<pair<V, vector<T>>>& res,
 	size_t i,
 	F f
 ) {
 	if(i == opt.size()) {
-		f((const vector<pair<RealVarPtr, vector<double>>>&)res);
+		f((const vector<pair<V, vector<T>>>&)res);
 		return;
 	}
-	for(vector<double>& disc : opt[i].second) {
+	for(vector<T>& disc : opt[i].second) {
 		swap(res[i].second, disc);
 		cycleDiscsRecursion(opt, res, i + 1, f);
 		swap(res[i].second, disc);
 	}
 }
 
-template <typename F>
-void cycleDiscs(vector<pair<RealVarPtr, vector<vector<double>>>>& opt, F f) {
-	vector<pair<RealVarPtr, vector<double>>> res(opt.size());
+template <typename V, typename T, typename F>
+void cycleDiscs(vector<pair<V, vector<vector<T>>>>& opt, F f) {
+	vector<pair<V, vector<T>>> res(opt.size());
 	for(size_t i = 0; i < opt.size(); ++i) {
 		res[i].first = opt[i].first;
 	}
@@ -270,6 +315,7 @@ template <typename R>
 double computeFullTableScore(
 	const vector<pair<RealVarPtr, vector<double>>>& realPred,
 	const vector<CatVarPtr>& catPred,
+	const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred,
 	const shared_ptr<const R>& response,
 	const vector<vector<double>>& data
 ) {
@@ -321,6 +367,28 @@ double computeFullTableScore(
 		}
 		parts = move(newParts);
 	}
+	for(const pair<OrdVarPtr, vector<size_t>>& p : ordPred) {
+		const OrdVar& var = *p.first;
+		const vector<size_t>& splits = p.second;
+
+		cellSize /= (double)splits.size() + 1.0;
+
+		vector<vector<size_t>> newParts;
+		for(const vector<size_t>& part : parts) {
+			vector<vector<size_t>> subs(splits.size() + 1);
+			for(size_t pi : part) {
+				size_t val = var.parseDataSrcVal(data[pi]);
+				size_t si = upper_bound(splits.begin(), splits.end(), val) - splits.begin();
+				subs[si].push_back(pi);
+			}
+			for(vector<size_t>& sub : subs) {
+				if(!sub.empty()) {
+					newParts.push_back(move(sub));
+				}
+			}
+		}
+		parts = move(newParts);
+	}
 
 	double score = 0.0;
 	for(const vector<size_t>& part : parts) {
@@ -332,16 +400,66 @@ double computeFullTableScore(
 }
 
 template <typename R>
-TreePtr createFullTableTreeRecursion2(
+TreeResult createFullTableTreeRecursion3(
+	const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred,
+	size_t ordPredIdx,
+	const shared_ptr<const R>& response,
+	const vector<const vector<double>*>& data,
+	double cellSize
+) {
+	if(ordPredIdx == ordPred.size()) {
+		Leaf<R> leaf(response, data.size(), [&](size_t i) {
+			return response->parseDataSrcVal(*data[i]);
+		});
+		double dataScore = leaf.stats.dataScore(*response, cellSize);
+		TreePtr tree = make_unique<Tree>(leaf);
+		return TreeResult{dataScore, 0.0, move(tree)};
+	}
+
+	const OrdVarPtr& var = ordPred[ordPredIdx].first;
+	const vector<size_t>& splits = ordPred[ordPredIdx].second;
+
+	vector<vector<const vector<double>*>> subs(splits.size() + 1);
+	for(const vector<double>* point : data) {
+		size_t val = var->parseDataSrcVal(*point);
+		size_t si = upper_bound(splits.begin(), splits.end(), val) - splits.begin();
+		subs[si].push_back(point);
+	}
+
+	cellSize /= (double)subs.size();
+	
+	TreeResult ret;
+	ret.dataScore = 0.0;
+	ret.structureScore = 0.0;
+	for(size_t si = 0; si < subs.size(); ++si) {
+		TreeResult tree = createFullTableTreeRecursion3(ordPred, ordPredIdx + 1, response, subs[si], cellSize);
+		ret.dataScore += tree.dataScore;
+		if(si) {
+			ret.tree = make_unique<Tree>(OrdSplit{
+				{move(ret.tree), move(tree.tree)},
+				var,
+				ones64(si),
+				bit64(si)
+			});
+		} else {
+			ret.tree = move(tree.tree);
+		}
+	}
+
+	return ret;
+}
+
+template <typename R>
+TreeResult createFullTableTreeRecursion2(
 	const vector<CatVarPtr>& catPred,
 	size_t catPredIdx,
+	const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred,
 	const shared_ptr<const R>& response,
-	const vector<const vector<double>*>& data
+	const vector<const vector<double>*>& data,
+	double cellSize
 ) {
 	if(catPredIdx == catPred.size()) {
-		return make_unique<Tree>(Leaf<R>(response, data.size(), [&](size_t i) {
-			return response->parseDataSrcVal(*data[i]);
-		}));
+		return createFullTableTreeRecursion3(ordPred, 0, response, data, cellSize);
 	}
 
 	const CatVarPtr& var = catPred[catPredIdx];
@@ -352,18 +470,23 @@ TreePtr createFullTableTreeRecursion2(
 		subs[val].push_back(point);
 	}
 
-	TreePtr ret;
+	cellSize /= (double)subs.size();
+
+	TreeResult ret;
+	ret.dataScore = 0.0;
+	ret.structureScore = 0.0;
 	for(size_t si = 0; si < subs.size(); ++si) {
-		TreePtr tree = createFullTableTreeRecursion2(catPred, catPredIdx + 1, response, subs[si]);
+		TreeResult tree = createFullTableTreeRecursion2(catPred, catPredIdx + 1, ordPred, response, subs[si], cellSize);
+		ret.dataScore += tree.dataScore;
 		if(si) {
-			ret = make_unique<Tree>(CatSplit{
-				{move(ret), move(tree)},
+			ret.tree = make_unique<Tree>(CatSplit{
+				{move(ret.tree), move(tree.tree)},
 				var,
 				ones64(si),
 				bit64(si)
 			});
 		} else {
-			ret = move(tree);
+			ret.tree = move(tree.tree);
 		}
 	}
 
@@ -371,15 +494,17 @@ TreePtr createFullTableTreeRecursion2(
 }
 
 template <typename R>
-TreePtr createFullTableTreeRecursion1(
+TreeResult createFullTableTreeRecursion1(
 	const vector<pair<RealVarPtr, vector<double>>>& realPred,
 	size_t realPredIdx,
 	const vector<CatVarPtr>& catPred,
+	const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred,
 	const shared_ptr<const R>& response,
-	const vector<const vector<double>*>& data
+	const vector<const vector<double>*>& data,
+	double cellSize
 ) {
 	if(realPredIdx == realPred.size()) {
-		return createFullTableTreeRecursion2(catPred, 0, response, data);
+		return createFullTableTreeRecursion2(catPred, 0, ordPred, response, data, cellSize);
 	}
 
 	const RealVarPtr& var = realPred[realPredIdx].first;
@@ -391,18 +516,23 @@ TreePtr createFullTableTreeRecursion1(
 		size_t si = upper_bound(splits.begin(), splits.end(), val) - splits.begin();
 		subs[si].push_back(point);
 	}
+
+	cellSize /= (double)subs.size();
 	
-	TreePtr ret;
+	TreeResult ret;
+	ret.dataScore = 0.0;
+	ret.structureScore = 0.0;
 	for(size_t si = 0; si < subs.size(); ++si) {
-		TreePtr tree = createFullTableTreeRecursion1(realPred, realPredIdx + 1, catPred, response, subs[si]);
+		TreeResult tree = createFullTableTreeRecursion1(realPred, realPredIdx + 1, catPred, ordPred, response, subs[si], cellSize);
+		ret.dataScore += tree.dataScore;
 		if(si) {
-			ret = make_unique<Tree>(RealSplit{
-				{move(ret), move(tree)},
+			ret.tree = make_unique<Tree>(RealSplit{
+				{move(ret.tree), move(tree.tree)},
 				var,
 				splits[si - 1]
 			});
 		} else {
-			ret = move(tree);
+			ret.tree = move(tree.tree);
 		}
 	}
 
@@ -410,9 +540,10 @@ TreePtr createFullTableTreeRecursion1(
 }
 
 template <typename R>
-TreePtr createFullTableTree(
+TreeResult createFullTableTree(
 	const vector<pair<RealVarPtr, vector<double>>>& realPred,
 	const vector<CatVarPtr>& catPred,
+	const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred,
 	const shared_ptr<const R>& response,
 	const vector<vector<double>>& data
 ) {
@@ -421,7 +552,7 @@ TreePtr createFullTableTree(
 		dataPtrs[i] = &data[i];
 	}
 
-	return createFullTableTreeRecursion1(realPred, 0, catPred, response, dataPtrs);
+	return createFullTableTreeRecursion1(realPred, 0, catPred, ordPred, response, dataPtrs, 1.0);
 }
 
 template <typename R>
@@ -441,6 +572,7 @@ TreeResult optimizeFullTable(
 
 	vector<pair<RealVarPtr, vector<vector<double>>>> realPredOpts;
 	vector<CatVarPtr> catPred;
+	vector<pair<OrdVarPtr, vector<vector<size_t>>>> ordPredOpts;
 	for(const VarPtr& var : predictors) {
 		lambdaVisit(var,
 			[&](const RealVarPtr& var) {
@@ -457,6 +589,21 @@ TreeResult optimizeFullTable(
 			},
 			[&](const CatVarPtr& var) {
 				catPred.push_back(var);
+			},
+			[&](const OrdVarPtr& var) {
+				vector<double> vals;
+				for(const vector<double>& point : data) {
+					vals.push_back((double)var->parseDataSrcVal(point));
+				}
+				sort(vals.begin(), vals.end());
+				vector<vector<size_t>> discs(discCount);
+				for(size_t i = 0; i < discCount; ++i) {
+					vector<double> disc = computeDisc(vals, i + 2);
+					for(double x : disc) {
+						discs[i].push_back((size_t)ceil(x));
+					}
+				}
+				ordPredOpts.emplace_back(var, move(discs));
 			}
 		);
 	}
@@ -464,19 +611,23 @@ TreeResult optimizeFullTable(
 	bool first = true;
 	double bestScore;
 	vector<pair<RealVarPtr, vector<double>>> bestRealPred;
+	vector<pair<OrdVarPtr, vector<size_t>>> bestOrdPred;
 	cycleDiscs(realPredOpts, [&](const vector<pair<RealVarPtr, vector<double>>>& realPred) {
-		double score = computeFullTableScore(realPred, catPred, response, data);
-		if(first || score > bestScore) {
-			bestScore = score;
-			bestRealPred = realPred;
-		}
-		first = false;
+		cycleDiscs(ordPredOpts, [&](const vector<pair<OrdVarPtr, vector<size_t>>>& ordPred) {
+			double score = computeFullTableScore(realPred, catPred, ordPred, response, data);
+			if(first || score > bestScore) {
+				bestScore = score;
+				bestRealPred = realPred;
+				bestOrdPred = ordPred;
+			}
+			first = false;
+		});
 	});
 
-	TreeResult ret;
-	ret.tree = createFullTableTree(bestRealPred, catPred, response, data);
-	ret.dataScore = bestScore;
-	ret.structureScore = 0.0;
+	TreeResult ret = createFullTableTree(bestRealPred, catPred, bestOrdPred, response, data);;
+	if(abs(ret.dataScore - bestScore) > 0.01 || ret.structureScore != 0.0) {
+		fail("Internal error in optimizeFullTable");
+	}
 	return ret;
 }
 
@@ -594,10 +745,39 @@ void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string p
 			}
 			out << "\n";
 		},
+		[&](const OrdLeaf& leaf) {
+			out << "-- " << leaf.var->name << ": ";
+			for(size_t i = 0; i < leaf.var->cats.size(); ++i) {
+				if(i) {
+					out << ", ";
+				}
+				out << leaf.var->cats[i].name << " x" << leaf.stats.catCount[i];
+			}
+			out << "\n";
+		},
 		[&](const RealSplit& split) {
 			out << "-+ " << split.var->name << " (< or >=) " << split.splitVal << "\n";
 		},
 		[&](const CatSplit& split) {
+			auto writeMask = [&](uint64_t mask) {
+				bool first = true;
+				for(size_t i = 0; i < split.var->cats.size(); ++i) {
+					if(mask & bit64(i)) {
+						if(!first) {
+							out << ", ";
+						}
+						first = false;
+						out << split.var->cats[i].name;
+					}
+				}
+			};
+			out << "-+ " << split.var->name << " in {";
+			writeMask(split.leftCatMask);
+			out << "} or {";
+			writeMask(split.rightCatMask);
+			out << "}\n";
+		},
+		[&](const OrdSplit& split) {
 			auto writeMask = [&](uint64_t mask) {
 				bool first = true;
 				for(size_t i = 0; i < split.var->cats.size(); ++i) {
@@ -630,7 +810,7 @@ void printTreeRecursion(const TreePtr& tree, ostream& out, string pre1, string p
 
 TreeResult optimizeTree(
 	const vector<VarPtr>& predictors,
-	const VarPtr & response,
+	const VarPtr& response,
 	const vector<vector<double>>& data,
 	bool useStructureScore
 ) {

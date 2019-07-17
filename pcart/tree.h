@@ -9,13 +9,15 @@ template <typename T>
 struct Leaf;
 typedef Leaf<RealVar> RealLeaf;
 typedef Leaf<CatVar> CatLeaf;
+typedef Leaf<OrdVar> OrdLeaf;
 
 template <typename T>
 struct Split;
 typedef Split<RealVar> RealSplit;
 typedef Split<CatVar> CatSplit;
+typedef Split<OrdVar> OrdSplit;
 
-typedef std::variant<RealLeaf, CatLeaf, RealSplit, CatSplit> Tree;
+typedef std::variant<RealLeaf, CatLeaf, OrdLeaf, RealSplit, CatSplit, OrdSplit> Tree;
 typedef std::unique_ptr<Tree> TreePtr;
 
 struct BaseLeaf {};
@@ -46,6 +48,13 @@ struct Split<RealVar> : public BaseSplit {
 template <>
 struct Split<CatVar> : public BaseSplit {
 	CatVarPtr var;
+	uint64_t leftCatMask;
+	uint64_t rightCatMask;
+};
+
+template <>
+struct Split<OrdVar> : public BaseSplit {
+	OrdVarPtr var;
 	uint64_t leftCatMask;
 	uint64_t rightCatMask;
 };

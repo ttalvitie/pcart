@@ -4,25 +4,11 @@
 
 namespace pcart {
 
-namespace {
-
-double lognCr(double n, double k) {
-	return lgamma(n + 1.0) - lgamma(k + 1.0) - lgamma(n - k + 1.0);
-}
-
-double addLog(double x, double y) {
-	if(x < y) {
-		std::swap(x, y);
-	}
-	return x + log(1.0 + exp(y - x));
-}
-
-}
-
 StructureScoreTerms computeStructureScoreTerms(const vector<VarPtr>& predictors) {
 	double c = 0.0;
 	vector<size_t> realStateCounts;
 	vector<size_t> catStateCounts;
+	vector<size_t> ordStateCounts;
 	for(const VarPtr& var : predictors) {
 		lambdaVisit(var,
 			[&](const RealVarPtr& var) {
@@ -32,8 +18,12 @@ StructureScoreTerms computeStructureScoreTerms(const vector<VarPtr>& predictors)
 			[&](const CatVarPtr& var) {
 				c += (double)bit64(var->cats.size() - 1) - 1.0;
 				catStateCounts.push_back(var->cats.size());
+			},
+			[&](const OrdVarPtr& var) {
+				c += (double)var->cats.size() - 1.0;
+				ordStateCounts.push_back(var->cats.size());
 			}
-			);
+		);
 	}
 	double term = 0.0;
 	if(c != 0.0) {
@@ -49,6 +39,9 @@ StructureScoreTerms computeStructureScoreTerms(const vector<VarPtr>& predictors)
 		stateCount *= x;
 	}
 	for(size_t x : catStateCounts) {
+		stateCount *= x;
+	}
+	for(size_t x : ordStateCounts) {
 		stateCount *= x;
 	}
 	vector<double> sums(stateCount);
@@ -69,6 +62,15 @@ StructureScoreTerms computeStructureScoreTerms(const vector<VarPtr>& predictors)
 				double sub1 = sums[conf - a * mul];
 				double sub2 = sums[conf - (s - a + 1) * mul];
 				val = addLog(val, sub1 + sub2 + lognCr((double)s, (double)a));
+			}
+			mul *= x;
+		}
+		for(size_t x : ordStateCounts) {
+			size_t s = (conf / mul) % x;
+			for(size_t a = 1; a <= s; ++a) {
+				double sub1 = sums[conf - a * mul];
+				double sub2 = sums[conf - (s - a + 1) * mul];
+				val = addLog(val, sub1 + sub2);
 			}
 			mul *= x;
 		}

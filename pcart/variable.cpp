@@ -81,4 +81,30 @@ CatVarPtr createBDeuCatVar(
 	return make_shared<CatVar>(move(var));
 }
 
+OrdVarPtr createOrdVar(
+	string name,
+	size_t dataSrcIdx,
+	const vector<string>& catNames,
+	double alpha,
+	double kappa
+) {
+	OrdVar var;
+
+	var.name = move(name);
+	var.dataSrcIdx = dataSrcIdx;
+	var.kappa = kappa;
+
+	if(catNames.empty()) {
+		fail("Cat variable ", name, " has no categories");
+	}
+
+	var.cats.resize(catNames.size());
+	for(size_t i = 0; i < catNames.size(); ++i) {
+		var.cats[i].name = catNames[i];
+		var.cats[i].alpha = alpha;
+	}
+
+	return make_shared<OrdVar>(move(var));
+}
+
 }

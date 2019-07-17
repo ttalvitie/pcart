@@ -89,4 +89,15 @@ constexpr auto lambdaVisit(Variant&& var, Visitor&&... vis) {
 	return visit(LambdaVisitor{ vis... }, var);
 }
 
+inline double lognCr(double n, double k) {
+	return lgamma(n + 1.0) - lgamma(k + 1.0) - lgamma(n - k + 1.0);
+}
+
+inline double addLog(double x, double y) {
+	if(x < y) {
+		std::swap(x, y);
+	}
+	return x + log(1.0 + exp(y - x));
+}
+
 }

@@ -37,6 +37,9 @@ void writeTree(const TreePtr& tree) {
 			writeTree(split.leftChild);
 			writeTree(split.rightChild);
 		},
+		[&](const OrdSplit& split) {
+			fail("Unexpected ordinal split");
+		},
 		[&](const RealLeaf& leaf) {
 			cout << "LEAF REAL " << leaf.stats.avg << " " << leaf.stats.stddev << "\n";
 		},
@@ -46,6 +49,9 @@ void writeTree(const TreePtr& tree) {
 				cout << " " << x;
 			}
 			cout << "\n";
+		},
+		[&](const OrdLeaf& leaf) {
+			fail("Unexpected ordinal leaf");
 		}
 	);
 }
